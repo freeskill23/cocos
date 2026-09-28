@@ -7,6 +7,7 @@ export interface ProductRow {
   base_depth: number;
   base_height: number;
   base_price: number;
+  detail_content: string;
   is_active: boolean;
   display_order: number;
   created_at: string;

@@ -4,6 +4,7 @@ import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { LandingPage } from "@/pages/LandingPage";
 import { CustomPage } from "@/pages/CustomPage";
+import { ProductDetailPage } from "@/pages/ProductDetailPage";
 import { AdminLogin } from "@/pages/AdminLogin";
 import { AdminDashboard } from "@/pages/AdminDashboard";
 import { Loader2 } from "lucide-react";
@@ -35,17 +36,24 @@ function AppRoutes() {
     return <AdminDashboard onNavigate={navigate} />;
   }
 
-  const isCustom = path.startsWith("/custom");
+  // /custom/product/:id → product detail page
+  const productDetailMatch = path.match(/^\/custom\/product\/(.+)$/);
 
   return (
     <div className="min-h-screen bg-ivory">
       <Navbar onNavigate={navigate} currentPath={path} />
-      {isCustom ? (
+      {productDetailMatch ? (
+        <ProductDetailPage
+          productId={productDetailMatch[1]}
+          onNavigate={navigate}
+          onOrder={() => navigate("/custom")}
+        />
+      ) : path.startsWith("/custom") ? (
         <CustomPage onNavigate={navigate} />
       ) : (
         <LandingPage onNavigate={navigate} />
       )}
-      {!isCustom && <Footer onNavigate={navigate} />}
+      {!path.startsWith("/custom") && <Footer onNavigate={navigate} />}
     </div>
   );
 }

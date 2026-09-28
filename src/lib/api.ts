@@ -21,8 +21,21 @@ export async function fetchAllProducts(): Promise<ProductRow[]> {
 }
 
 export async function upsertProduct(item: Partial<ProductRow> & { name: string; base_price: number; base_width: number; base_depth: number; base_height: number }): Promise<void> {
-  const { error } = await supabase.from("products").upsert(item);
+  const { error } = await supabase.from("products").upsert({
+    ...item,
+    updated_at: new Date().toISOString(),
+  });
   if (error) throw error;
+}
+
+export async function fetchProductById(id: string): Promise<ProductRow | null> {
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
 }
 
 export async function deleteProduct(id: string): Promise<void> {

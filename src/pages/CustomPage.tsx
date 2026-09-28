@@ -61,6 +61,7 @@ export function CustomPage({ onNavigate }: CustomPageProps) {
               onSelect={handleSelectProduct}
               onNext={next}
               onBack={() => onNavigate("/")}
+              onDetail={(productId) => onNavigate(`/custom/product/${productId}`)}
             />
           )}
           {step === 1 && product && (

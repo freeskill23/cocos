@@ -3,6 +3,7 @@ import { Plus, Trash2, Edit3, X, Loader2, Eye, EyeOff, Save, Package } from "luc
 import { fetchAllProducts, upsertProduct, deleteProduct } from "@/lib/api";
 import type { ProductRow } from "@/types/database";
 import { formatWon } from "@/lib/pricing";
+import { ImageUpload } from "@/components/admin/ImageUpload";
 
 export function ProductsTab() {
   const [items, setItems] = useState<ProductRow[]>([]);
@@ -141,7 +142,8 @@ function ProductEditor({
 }) {
   const [name, setName] = useState(item?.name ?? "");
   const [description, setDescription] = useState(item?.description ?? "");
-  const [imageUrl, setImageUrl] = useState(item?.image_url ?? "");
+  const [imageUrl, setImageUrl] = useState<string | null>(item?.image_url ?? null);
+  const [detailContent, setDetailContent] = useState(item?.detail_content ?? "");
   const [baseWidth, setBaseWidth] = useState(item?.base_width ?? 750);
   const [baseDepth, setBaseDepth] = useState(item?.base_depth ?? 550);
   const [baseHeight, setBaseHeight] = useState(item?.base_height ?? 600);
@@ -163,7 +165,8 @@ function ProductEditor({
         id: item?.id,
         name,
         description: description || "",
-        image_url: imageUrl || null,
+        image_url: imageUrl,
+        detail_content: detailContent,
         base_width: baseWidth,
         base_depth: baseDepth,
         base_height: baseHeight,
@@ -181,7 +184,7 @@ function ProductEditor({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 sm:p-8" onClick={(e) => e.stopPropagation()}>
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 sm:p-8" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="font-serif text-xl text-charcoal">{item ? "상품 수정" : "상품 추가"}</h2>
           <button onClick={onClose} className="text-charcoal-muted hover:text-charcoal">
@@ -194,11 +197,28 @@ function ProductEditor({
             <input value={name} onChange={(e) => setName(e.target.value)} className="input-field" placeholder="예: 클래식 강아지집" />
           </FormField>
           <FormField label="상품 설명">
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className="input-field resize-none" placeholder="상품 설명을 입력하세요." />
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className="input-field resize-none" placeholder="상품 목록에 표시될 짧은 설명" />
           </FormField>
-          <FormField label="이미지 URL (선택)">
-            <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className="input-field" placeholder="https://..." />
+
+          <ImageUpload
+            label="상품 이미지"
+            value={imageUrl}
+            onChange={setImageUrl}
+            aspectRatio="aspect-[4/3]"
+            maxWidth={1200}
+            maxHeight={1200}
+          />
+
+          <FormField label="상세 페이지 내용">
+            <textarea
+              value={detailContent}
+              onChange={(e) => setDetailContent(e.target.value)}
+              rows={6}
+              className="input-field resize-y"
+              placeholder="상세 페이지에 표시될 상세 설명을 입력하세요.&#10;특징, 소재, 제작 방식 등을 자유롭게 작성할 수 있습니다."
+            />
           </FormField>
+
           <div className="rounded-2xl bg-birch-50 p-4">
             <p className="text-xs font-semibold text-charcoal">기본 사이즈 (mm)</p>
             <div className="mt-3 grid gap-4 sm:grid-cols-3">

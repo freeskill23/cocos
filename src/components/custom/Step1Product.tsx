@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Check } from "lucide-react";
+import { Loader2, Check, Info } from "lucide-react";
 import { fetchActiveProducts, fetchSettings } from "@/lib/api";
 import type { ProductRow } from "@/types/database";
 import { DEFAULT_PRICING, DEFAULT_SIZES, type PricingSettings, type SizeSettings } from "@/config/pricing";
@@ -10,9 +10,10 @@ interface Step1Props {
   onSelect: (product: ProductRow, pricing: PricingSettings, sizes: SizeSettings) => void;
   onNext: () => void;
   onBack: () => void;
+  onDetail: (productId: string) => void;
 }
 
-export function Step1Product({ selected, onSelect, onNext, onBack }: Step1Props) {
+export function Step1Product({ selected, onSelect, onNext, onBack, onDetail }: Step1Props) {
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [pricing, setPricing] = useState<PricingSettings>(DEFAULT_PRICING);
   const [sizes, setSizes] = useState<SizeSettings>(DEFAULT_SIZES);
@@ -50,9 +51,8 @@ export function Step1Product({ selected, onSelect, onNext, onBack }: Step1Props)
           {products.map((p) => {
             const isSelected = selected?.id === p.id;
             return (
-              <button
+              <div
                 key={p.id}
-                onClick={() => onSelect(p, pricing, sizes)}
                 className={`group relative flex flex-col overflow-hidden rounded-3xl border-2 bg-white text-left transition-all duration-300 ${
                   isSelected
                     ? "border-charcoal shadow-[0_8px_40px_rgba(184,160,126,0.15)]"
@@ -88,8 +88,25 @@ export function Step1Product({ selected, onSelect, onNext, onBack }: Step1Props)
                       {p.base_width}×{p.base_depth}×{p.base_height}mm
                     </span>
                   </div>
+                  <div className="mt-3 flex items-center gap-3 border-t border-birch-100 pt-3">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onSelect(p, pricing, sizes); }}
+                      className={`flex-1 rounded-lg py-2 text-xs font-medium transition-colors ${
+                        isSelected ? "bg-charcoal text-ivory" : "bg-birch-100 text-charcoal hover:bg-birch-200"
+                      }`}
+                    >
+                      선택
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onDetail(p.id); }}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-charcoal-muted transition-colors hover:text-charcoal"
+                    >
+                      <Info size={13} />
+                      자세히
+                    </button>
+                  </div>
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
