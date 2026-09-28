@@ -1,5 +1,34 @@
 import { supabase } from "@/lib/supabase";
-import type { OrderRow, PortfolioRow, ReviewRow, SettingsMap } from "@/types/database";
+import type { OrderRow, PortfolioRow, ReviewRow, SettingsMap, ProductRow } from "@/types/database";
+
+export async function fetchActiveProducts(): Promise<ProductRow[]> {
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .eq("is_active", true)
+    .order("display_order", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function fetchAllProducts(): Promise<ProductRow[]> {
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .order("display_order", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function upsertProduct(item: Partial<ProductRow> & { name: string; base_price: number; base_width: number; base_depth: number; base_height: number }): Promise<void> {
+  const { error } = await supabase.from("products").upsert(item);
+  if (error) throw error;
+}
+
+export async function deleteProduct(id: string): Promise<void> {
+  const { error } = await supabase.from("products").delete().eq("id", id);
+  if (error) throw error;
+}
 
 export async function fetchVisiblePortfolio(): Promise<PortfolioRow[]> {
   const { data, error } = await supabase
@@ -66,30 +95,18 @@ export async function upsertSetting(key: string, value: unknown): Promise<void> 
 }
 
 export interface OrderInsert {
-  dog_name: string | null;
-  breed: string | null;
-  weight: string | null;
-  body_length: string | null;
-  memo: string | null;
+  product_id: string | null;
+  product_name: string | null;
   width: number;
   depth: number;
   height: number;
-  design_id: string;
-  door_position: string;
-  door_size_mode: string;
-  door_custom_width: number;
-  door_custom_height: number;
-  engraving: string;
-  engraving_text: string;
-  floor_type: string;
-  cushion: string;
-  top_type: string;
   total_price: number;
   customer_name: string;
   customer_phone: string;
   customer_email: string | null;
   customer_address: string;
   customer_detail_address: string | null;
+  memo: string | null;
 }
 
 export async function insertOrder(order: OrderInsert): Promise<void> {

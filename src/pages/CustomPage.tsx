@@ -1,16 +1,12 @@
 import { useState } from "react";
 import { WizardSteps } from "@/components/WizardSteps";
-import { Step1DogInfo, type DogInfo } from "@/components/custom/Step1DogInfo";
+import { Step1Product } from "@/components/custom/Step1Product";
 import { Step2Size } from "@/components/custom/Step2Size";
-import { Step3Design } from "@/components/custom/Step3Design";
-import { Step4Options } from "@/components/custom/Step4Options";
-import { Step5Quote } from "@/components/custom/Step5Quote";
-import { Step6Order } from "@/components/custom/Step6Order";
-import { SIZE_LIMITS } from "@/config/sizes";
-import { DEFAULT_DESIGN_ID, type DesignId } from "@/config/designs";
-import { DEFAULT_OPTIONS, type OptionChoice } from "@/config/options";
+import { Step3Order } from "@/components/custom/Step3Order";
+import { DEFAULT_PRICING, DEFAULT_SIZES, type PricingSettings, type SizeSettings } from "@/config/pricing";
+import type { ProductRow } from "@/types/database";
 
-const WIZARD_STEPS = ["반려견 정보", "사이즈", "디자인", "옵션", "견적", "주문"];
+const WIZARD_STEPS = ["상품 선택", "사이즈", "주문"];
 
 interface CustomPageProps {
   onNavigate: (to: string) => void;
@@ -18,38 +14,28 @@ interface CustomPageProps {
 
 export function CustomPage({ onNavigate }: CustomPageProps) {
   const [step, setStep] = useState(0);
-  const [dogInfo, setDogInfo] = useState<DogInfo>({
-    name: "",
-    breed: "",
-    weight: "",
-    bodyLength: "",
-    memo: "",
-  });
-  const [dimensions, setDimensions] = useState({
-    width: 750,
-    depth: 550,
-    height: 600,
-  });
-  const [designId, setDesignId] = useState<DesignId>(DEFAULT_DESIGN_ID);
-  const [options, setOptions] = useState<OptionChoice>(DEFAULT_OPTIONS);
+  const [product, setProduct] = useState<ProductRow | null>(null);
+  const [dimensions, setDimensions] = useState({ width: 750, depth: 550, height: 600 });
+  const [pricing, setPricing] = useState<PricingSettings>(DEFAULT_PRICING);
+  const [sizes, setSizes] = useState<SizeSettings>(DEFAULT_SIZES);
 
   const next = () => setStep((s) => Math.min(s + 1, WIZARD_STEPS.length - 1));
   const back = () => setStep((s) => Math.max(s - 1, 0));
 
-  const handleApplyRecommend = (w: number, d: number, h: number) => {
+  const handleSelectProduct = (p: ProductRow, pricingSettings: PricingSettings, sizeSettings: SizeSettings) => {
+    setProduct(p);
+    setPricing(pricingSettings);
+    setSizes(sizeSettings);
     setDimensions({
-      width: Math.max(SIZE_LIMITS.MIN_WIDTH, Math.min(SIZE_LIMITS.MAX_WIDTH, w)),
-      depth: Math.max(SIZE_LIMITS.MIN_DEPTH, Math.min(SIZE_LIMITS.MAX_DEPTH, d)),
-      height: Math.max(SIZE_LIMITS.MIN_HEIGHT, Math.min(SIZE_LIMITS.MAX_HEIGHT, h)),
+      width: p.base_width,
+      depth: p.base_depth,
+      height: p.base_height,
     });
   };
 
   const handleRestart = () => {
     setStep(0);
-    setDogInfo({ name: "", breed: "", weight: "", bodyLength: "", memo: "" });
-    setDimensions({ width: 750, depth: 550, height: 600 });
-    setDesignId(DEFAULT_DESIGN_ID);
-    setOptions(DEFAULT_OPTIONS);
+    setProduct(null);
   };
 
   return (
@@ -60,7 +46,7 @@ export function CustomPage({ onNavigate }: CustomPageProps) {
             COCOS FIT · 코코스핏
           </p>
           <h1 className="mt-3 font-serif text-3xl text-charcoal sm:text-4xl">
-            우리 아이 집 만들기
+            강아지집 만들기
           </h1>
         </div>
 
@@ -70,56 +56,30 @@ export function CustomPage({ onNavigate }: CustomPageProps) {
 
         <div className="rounded-3xl border border-birch-200 bg-white p-6 sm:p-8 md:p-10">
           {step === 0 && (
-            <Step1DogInfo
-              info={dogInfo}
-              onChange={setDogInfo}
+            <Step1Product
+              selected={product}
+              onSelect={handleSelectProduct}
               onNext={next}
               onBack={() => onNavigate("/")}
-              onApplyRecommend={handleApplyRecommend}
             />
           )}
-          {step === 1 && (
+          {step === 1 && product && (
             <Step2Size
-              width={dimensions.width}
-              depth={dimensions.depth}
-              height={dimensions.height}
+              product={product}
+              dimensions={dimensions}
               onChange={setDimensions}
+              sizes={sizes}
+              pricing={pricing}
               onNext={next}
               onBack={back}
             />
           )}
-          {step === 2 && (
-            <Step3Design
-              selected={designId}
-              onSelect={setDesignId}
-              onNext={next}
-              onBack={back}
-            />
-          )}
-          {step === 3 && (
-            <Step4Options
-              options={options}
-              onChange={setOptions}
-              onNext={next}
-              onBack={back}
-            />
-          )}
-          {step === 4 && (
-            <Step5Quote
+          {step === 2 && product && (
+            <Step3Order
+              product={product}
               dimensions={dimensions}
-              designId={designId}
-              options={options}
-              dogInfo={dogInfo}
-              onNext={next}
-              onBack={back}
-            />
-          )}
-          {step === 5 && (
-            <Step6Order
-              dimensions={dimensions}
-              designId={designId}
-              options={options}
-              dogInfo={dogInfo}
+              pricing={pricing}
+              sizes={sizes}
               onBack={back}
               onRestart={handleRestart}
               onHome={() => onNavigate("/")}

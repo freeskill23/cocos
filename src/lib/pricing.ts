@@ -1,7 +1,6 @@
-import { PRICING_CONFIG } from "@/config/pricing";
-import { OPTION_PRICES, type OptionChoice } from "@/config/options";
-import { DESIGNS, type DesignId } from "@/config/designs";
-import { SIZE_LIMITS } from "@/config/sizes";
+import type { PricingSettings, SizeSettings } from "@/config/pricing";
+import { DEFAULT_PRICING, DEFAULT_SIZES } from "@/config/pricing";
+import type { ProductRow } from "@/types/database";
 
 export interface HouseDimensions {
   width: number;
@@ -10,76 +9,56 @@ export interface HouseDimensions {
 }
 
 export interface PriceBreakdown {
-  baseFee: number;
-  areaCost: number;
-  scaleCost: number;
-  designCost: number;
-  optionCost: number;
+  basePrice: number;
+  widthAdjust: number;
+  depthAdjust: number;
+  heightAdjust: number;
   packagingFee: number;
   shippingFee: number;
   total: number;
 }
 
 export interface PriceInput {
+  product: Pick<ProductRow, "base_width" | "base_depth" | "base_height" | "base_price">;
   dimensions: HouseDimensions;
-  designId: DesignId;
-  options: OptionChoice;
+  pricing: PricingSettings;
 }
 
-function clampDimensions(d: HouseDimensions): HouseDimensions {
+function clampDimensions(d: HouseDimensions, sizes: SizeSettings): HouseDimensions {
   return {
-    width: Math.max(SIZE_LIMITS.MIN_WIDTH, Math.min(SIZE_LIMITS.MAX_WIDTH, d.width)),
-    depth: Math.max(SIZE_LIMITS.MIN_DEPTH, Math.min(SIZE_LIMITS.MAX_DEPTH, d.depth)),
-    height: Math.max(SIZE_LIMITS.MIN_HEIGHT, Math.min(SIZE_LIMITS.MAX_HEIGHT, d.height)),
+    width: Math.max(sizes.minWidth, Math.min(sizes.maxWidth, d.width)),
+    depth: Math.max(sizes.minDepth, Math.min(sizes.maxDepth, d.depth)),
+    height: Math.max(sizes.minHeight, Math.min(sizes.maxHeight, d.height)),
   };
 }
 
-function calcOptionCost(options: OptionChoice): number {
-  let sum = 0;
-  sum += OPTION_PRICES.doorPosition[options.doorPosition];
-  sum += OPTION_PRICES.doorSizeMode[options.doorSizeMode];
-  sum += OPTION_PRICES.engraving[options.engraving];
-  sum += OPTION_PRICES.floor[options.floor];
-  sum += OPTION_PRICES.cushion[options.cushion];
-  sum += OPTION_PRICES.top[options.top];
-  return sum;
-}
+export function calculatePrice(input: PriceInput, sizes: SizeSettings = DEFAULT_SIZES): PriceBreakdown {
+  const d = clampDimensions(input.dimensions, sizes);
+  const p = input.pricing;
 
-export function calcArea(d: HouseDimensions): number {
-  return 2 * (d.width * d.height) + 2 * (d.depth * d.height) + d.width * d.depth;
-}
+  const widthDiffCm = Math.max(0, Math.round((d.width - input.product.base_width) / 10));
+  const depthDiffCm = Math.max(0, Math.round((d.depth - input.product.base_depth) / 10));
+  const heightDiffCm = Math.max(0, Math.round((d.height - input.product.base_height) / 10));
 
-export function calcScaleFactor(d: HouseDimensions): number {
-  const { MIN_WIDTH, MIN_DEPTH, MIN_HEIGHT } = SIZE_LIMITS;
-  const wRatio = d.width / MIN_WIDTH;
-  const dRatio = d.depth / MIN_DEPTH;
-  const hRatio = d.height / MIN_HEIGHT;
-  const volume = wRatio * dRatio * hRatio;
-  return Math.max(0, volume - 1);
-}
+  const basePrice = input.product.base_price;
+  const widthAdjust = widthDiffCm * p.perCmWidth;
+  const depthAdjust = depthDiffCm * p.perCmDepth;
+  const heightAdjust = heightDiffCm * p.perCmHeight;
 
-export function calculatePrice(input: PriceInput): PriceBreakdown {
-  const d = clampDimensions(input.dimensions);
-  const design = DESIGNS.find((x) => x.id === input.designId);
-  const designCost = design?.extraPrice ?? 0;
-
-  const baseFee = PRICING_CONFIG.BASE_FEE;
-  const areaCost = Math.round(calcArea(d) * PRICING_CONFIG.AREA_RATE_PER_SQMM);
-  const scaleCost = Math.round(calcScaleFactor(d) * PRICING_CONFIG.SIZE_SCALE_RATE * 1000) * 10;
-  const optionCost = calcOptionCost(input.options);
-
-  const packagingFee: number = PRICING_CONFIG.PACKAGING_FEE;
-  let shippingFee: number = PRICING_CONFIG.SHIPPING_FEE;
-  const subtotal = baseFee + areaCost + scaleCost + designCost + optionCost + packagingFee;
-  if (subtotal >= PRICING_CONFIG.FREE_SHIPPING_THRESHOLD) {
+  const packagingFee = p.packagingFee;
+  let shippingFee = p.shippingFee;
+  const subtotal = basePrice + widthAdjust + depthAdjust + heightAdjust + packagingFee;
+  if (subtotal >= p.freeShippingThreshold) {
     shippingFee = 0;
   }
 
-  const total = baseFee + areaCost + scaleCost + designCost + optionCost + packagingFee + shippingFee;
+  const total = subtotal + shippingFee;
 
-  return { baseFee, areaCost, scaleCost, designCost, optionCost, packagingFee, shippingFee, total };
+  return { basePrice, widthAdjust, depthAdjust, heightAdjust, packagingFee, shippingFee, total };
 }
 
 export function formatWon(n: number): string {
   return n.toLocaleString("ko-KR") + "원";
 }
+
+export { DEFAULT_PRICING, DEFAULT_SIZES };

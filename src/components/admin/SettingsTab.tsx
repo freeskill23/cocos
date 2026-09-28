@@ -1,45 +1,12 @@
 import { useEffect, useState } from "react";
 import { Save, Loader2, AlertCircle, Check } from "lucide-react";
 import { fetchSettings, upsertSetting } from "@/lib/api";
-import type { SettingsMap } from "@/types/database";
-import { PRICING_CONFIG } from "@/config/pricing";
-import { SIZE_LIMITS } from "@/config/sizes";
-
-interface PricingSettings {
-  baseFee: number;
-  areaRatePerSqmm: number;
-  sizeScaleRate: number;
-  packagingFee: number;
-  shippingFee: number;
-  freeShippingThreshold: number;
-}
-
-interface SizeSettings {
-  minWidth: number;
-  maxWidth: number;
-  minDepth: number;
-  maxDepth: number;
-  minHeight: number;
-  maxHeight: number;
-}
+import type { PricingSettings, SizeSettings } from "@/types/database";
+import { DEFAULT_PRICING, DEFAULT_SIZES } from "@/config/pricing";
 
 export function SettingsTab() {
-  const [pricing, setPricing] = useState<PricingSettings>({
-    baseFee: PRICING_CONFIG.BASE_FEE,
-    areaRatePerSqmm: PRICING_CONFIG.AREA_RATE_PER_SQMM,
-    sizeScaleRate: PRICING_CONFIG.SIZE_SCALE_RATE,
-    packagingFee: PRICING_CONFIG.PACKAGING_FEE,
-    shippingFee: PRICING_CONFIG.SHIPPING_FEE,
-    freeShippingThreshold: PRICING_CONFIG.FREE_SHIPPING_THRESHOLD,
-  });
-  const [sizes, setSizes] = useState<SizeSettings>({
-    minWidth: SIZE_LIMITS.MIN_WIDTH,
-    maxWidth: SIZE_LIMITS.MAX_WIDTH,
-    minDepth: SIZE_LIMITS.MIN_DEPTH,
-    maxDepth: SIZE_LIMITS.MAX_DEPTH,
-    minHeight: SIZE_LIMITS.MIN_HEIGHT,
-    maxHeight: SIZE_LIMITS.MAX_HEIGHT,
-  });
+  const [pricing, setPricing] = useState<PricingSettings>(DEFAULT_PRICING);
+  const [sizes, setSizes] = useState<SizeSettings>(DEFAULT_SIZES);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -112,37 +79,44 @@ export function SettingsTab() {
       )}
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        {/* Pricing */}
+        {/* Per-cm pricing */}
         <div className="rounded-3xl border border-birch-200 bg-white p-6">
-          <h2 className="text-base font-semibold text-charcoal">가격 설정</h2>
-          <p className="mt-1 text-xs text-charcoal-muted">자동견적 계산에 사용되는 단가입니다.</p>
+          <h2 className="text-base font-semibold text-charcoal">1cm당 가격 상승폭</h2>
+          <p className="mt-1 text-xs text-charcoal-muted">기본 사이즈에서 1cm 커질 때마다 추가되는 가격입니다.</p>
           <div className="mt-6 space-y-4">
-            <NumberField label="기본 제작비 (원)" value={pricing.baseFee} onChange={(v) => setPricing({ ...pricing, baseFee: v })} />
-            <NumberField label="면적당 단가 (원/mm²)" value={pricing.areaRatePerSqmm} step={0.01} onChange={(v) => setPricing({ ...pricing, areaRatePerSqmm: v })} />
-            <NumberField label="사이즈 증가 비율" value={pricing.sizeScaleRate} step={0.001} onChange={(v) => setPricing({ ...pricing, sizeScaleRate: v })} />
+            <NumberField label="가로 1cm당 (원)" value={pricing.perCmWidth} onChange={(v) => setPricing({ ...pricing, perCmWidth: v })} />
+            <NumberField label="세로 1cm당 (원)" value={pricing.perCmDepth} onChange={(v) => setPricing({ ...pricing, perCmDepth: v })} />
+            <NumberField label="높이 1cm당 (원)" value={pricing.perCmHeight} onChange={(v) => setPricing({ ...pricing, perCmHeight: v })} />
+          </div>
+        </div>
+
+        {/* Other pricing */}
+        <div className="rounded-3xl border border-birch-200 bg-white p-6">
+          <h2 className="text-base font-semibold text-charcoal">기타 가격 설정</h2>
+          <p className="mt-1 text-xs text-charcoal-muted">포장비, 배송비 등 추가 비용 설정입니다.</p>
+          <div className="mt-6 space-y-4">
             <NumberField label="포장비 (원)" value={pricing.packagingFee} onChange={(v) => setPricing({ ...pricing, packagingFee: v })} />
             <NumberField label="배송비 (원)" value={pricing.shippingFee} onChange={(v) => setPricing({ ...pricing, shippingFee: v })} />
             <NumberField label="무료배송 기준 (원)" value={pricing.freeShippingThreshold} onChange={(v) => setPricing({ ...pricing, freeShippingThreshold: v })} />
           </div>
         </div>
+      </div>
 
-        {/* Sizes */}
-        <div className="rounded-3xl border border-birch-200 bg-white p-6">
-          <h2 className="text-base font-semibold text-charcoal">사이즈 범위</h2>
-          <p className="mt-1 text-xs text-charcoal-muted">고객이 입력할 수 있는 최소/최대 사이즈입니다.</p>
-          <div className="mt-6 space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <NumberField label="가로 최소 (mm)" value={sizes.minWidth} onChange={(v) => setSizes({ ...sizes, minWidth: v })} />
-              <NumberField label="가로 최대 (mm)" value={sizes.maxWidth} onChange={(v) => setSizes({ ...sizes, maxWidth: v })} />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <NumberField label="세로 최소 (mm)" value={sizes.minDepth} onChange={(v) => setSizes({ ...sizes, minDepth: v })} />
-              <NumberField label="세로 최대 (mm)" value={sizes.maxDepth} onChange={(v) => setSizes({ ...sizes, maxDepth: v })} />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <NumberField label="높이 최소 (mm)" value={sizes.minHeight} onChange={(v) => setSizes({ ...sizes, minHeight: v })} />
-              <NumberField label="높이 최대 (mm)" value={sizes.maxHeight} onChange={(v) => setSizes({ ...sizes, maxHeight: v })} />
-            </div>
+      <div className="mt-6 rounded-3xl border border-birch-200 bg-white p-6">
+        <h2 className="text-base font-semibold text-charcoal">사이즈 범위</h2>
+        <p className="mt-1 text-xs text-charcoal-muted">고객이 조정할 수 있는 최소/최대 사이즈입니다.</p>
+        <div className="mt-6 grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4">
+            <NumberField label="가로 최소 (mm)" value={sizes.minWidth} onChange={(v) => setSizes({ ...sizes, minWidth: v })} />
+            <NumberField label="가로 최대 (mm)" value={sizes.maxWidth} onChange={(v) => setSizes({ ...sizes, maxWidth: v })} />
+          </div>
+          <div className="grid gap-4">
+            <NumberField label="세로 최소 (mm)" value={sizes.minDepth} onChange={(v) => setSizes({ ...sizes, minDepth: v })} />
+            <NumberField label="세로 최대 (mm)" value={sizes.maxDepth} onChange={(v) => setSizes({ ...sizes, maxDepth: v })} />
+          </div>
+          <div className="grid gap-4">
+            <NumberField label="높이 최소 (mm)" value={sizes.minHeight} onChange={(v) => setSizes({ ...sizes, minHeight: v })} />
+            <NumberField label="높이 최대 (mm)" value={sizes.maxHeight} onChange={(v) => setSizes({ ...sizes, maxHeight: v })} />
           </div>
         </div>
       </div>

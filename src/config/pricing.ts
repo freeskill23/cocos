@@ -1,8 +1,41 @@
-export const PRICING_CONFIG = {
-  BASE_FEE: 30000,
-  AREA_RATE_PER_SQMM: 0.18,
-  SIZE_SCALE_RATE: 0.04,
-  PACKAGING_FEE: 4000,
-  SHIPPING_FEE: 15000,
-  FREE_SHIPPING_THRESHOLD: 200000,
-} as const;
+export interface PricingSettings {
+  baseFee: number;
+  areaRatePerSqmm: number;
+  sizeScaleRate: number;
+  packagingFee: number;
+  shippingFee: number;
+  freeShippingThreshold: number;
+  perCmWidth: number;
+  perCmDepth: number;
+  perCmHeight: number;
+}
+
+export interface SizeSettings {
+  minWidth: number;
+  maxWidth: number;
+  minDepth: number;
+  maxDepth: number;
+  minHeight: number;
+  maxHeight: number;
+}
+
+export const DEFAULT_PRICING: PricingSettings = {
+  baseFee: 30000,
+  areaRatePerSqmm: 0.18,
+  sizeScaleRate: 0.04,
+  packagingFee: 4000,
+  shippingFee: 15000,
+  freeShippingThreshold: 200000,
+  perCmWidth: 500,
+  perCmDepth: 500,
+  perCmHeight: 500,
+};
+
+export const DEFAULT_SIZES: SizeSettings = {
+  minWidth: 400,
+  maxWidth: 1200,
+  minDepth: 350,
+  maxDepth: 900,
+  minHeight: 400,
+  maxHeight: 1000,
+};

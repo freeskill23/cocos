@@ -2,7 +2,7 @@ import { Reveal } from "@/components/Reveal";
 
 export function ThreeStepSection() {
   const steps = [
-    { num: "01", title: "사이즈 입력", desc: "원하는 가로·세로·높이를 입력하거나 추천을 받으세요." },
+    { num: "01", title: "상품 선택", desc: "원하는 강아지집 모델을 선택하세요." },
     { num: "02", title: "실시간 견적 확인", desc: "입력한 사이즈와 옵션에 맞춰 즉시 가격이 계산됩니다." },
     { num: "03", title: "주문 후 제작", desc: "주문 완료 후 자작나무 합판으로 하나씩 제작합니다." },
   ];

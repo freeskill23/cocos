@@ -3,7 +3,6 @@ import { ProblemSection } from "@/components/sections/ProblemSection";
 import { CocosFitIntro } from "@/components/sections/CocosFitIntro";
 import { ThreeStepSection } from "@/components/sections/ThreeStepSection";
 import { MaterialSection } from "@/components/sections/MaterialSection";
-import { DesignSection } from "@/components/sections/DesignSection";
 import { PortfolioSection } from "@/components/sections/PortfolioSection";
 import { ProcessSection } from "@/components/sections/ProcessSection";
 import { ReviewSection } from "@/components/sections/ReviewSection";
@@ -25,7 +24,6 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
       <CocosFitIntro onNavigate={onNavigate} />
       <ThreeStepSection />
       <MaterialSection />
-      <DesignSection onNavigate={onNavigate} />
       <PortfolioSection />
       <ProcessSection />
       <ReviewSection />

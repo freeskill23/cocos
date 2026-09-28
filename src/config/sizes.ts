@@ -1,12 +1,12 @@
-export const SIZE_LIMITS = {
-  MIN_WIDTH: 400,
-  MAX_WIDTH: 1200,
-  MIN_DEPTH: 350,
-  MAX_DEPTH: 900,
-  MIN_HEIGHT: 400,
-  MAX_HEIGHT: 1000,
-} as const;
+import type { SizeSettings } from "@/config/pricing";
 
-export const SLIDER_STEP = 5;
+export const DEFAULT_SIZE_LIMITS: SizeSettings = {
+  minWidth: 400,
+  maxWidth: 1200,
+  minDepth: 350,
+  maxDepth: 900,
+  minHeight: 400,
+  maxHeight: 1000,
+};
 
-export type SizeLimitKey = keyof typeof SIZE_LIMITS;
+export const SLIDER_STEP = 10;

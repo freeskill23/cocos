@@ -2,14 +2,19 @@ import { useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { Reveal } from "@/components/Reveal";
 import { SizePreview } from "@/components/SizePreview";
-import { SIZE_LIMITS } from "@/config/sizes";
-import { DEFAULT_DESIGN_ID } from "@/config/designs";
-import { DEFAULT_OPTIONS } from "@/config/options";
+import { DEFAULT_PRICING, DEFAULT_SIZES } from "@/config/pricing";
 import { calculatePrice, formatWon } from "@/lib/pricing";
 
 interface CocosFitIntroProps {
   onNavigate: (to: string) => void;
 }
+
+const DEMO_PRODUCT = {
+  base_width: 750,
+  base_depth: 550,
+  base_height: 600,
+  base_price: 50000,
+};
 
 export function CocosFitIntro({ onNavigate }: CocosFitIntroProps) {
   const [w, setW] = useState(750);
@@ -17,10 +22,10 @@ export function CocosFitIntro({ onNavigate }: CocosFitIntroProps) {
   const [h, setH] = useState(600);
 
   const price = calculatePrice({
+    product: DEMO_PRODUCT,
     dimensions: { width: w, depth: d, height: h },
-    designId: DEFAULT_DESIGN_ID,
-    options: DEFAULT_OPTIONS,
-  });
+    pricing: DEFAULT_PRICING,
+  }, DEFAULT_SIZES);
 
   return (
     <section className="bg-birch-50 section-padding">
@@ -39,7 +44,6 @@ export function CocosFitIntro({ onNavigate }: CocosFitIntroProps) {
         <Reveal delay={150}>
           <div className="mx-auto mt-16 max-w-5xl overflow-hidden rounded-3xl border border-birch-200 bg-white shadow-[0_2px_40px_rgba(184,160,126,0.08)]">
             <div className="grid gap-0 md:grid-cols-2">
-              {/* Inputs */}
               <div className="p-8 sm:p-10">
                 <h3 className="text-lg font-semibold text-charcoal">사이즈 입력</h3>
                 <p className="mt-2 text-sm text-charcoal-muted">
@@ -49,26 +53,23 @@ export function CocosFitIntro({ onNavigate }: CocosFitIntroProps) {
                 <div className="mt-8 space-y-6">
                   <DimensionSlider
                     label="가로"
-                    unit="Width"
                     value={w}
-                    min={SIZE_LIMITS.MIN_WIDTH}
-                    max={SIZE_LIMITS.MAX_WIDTH}
+                    min={DEFAULT_SIZES.minWidth}
+                    max={DEFAULT_SIZES.maxWidth}
                     onChange={setW}
                   />
                   <DimensionSlider
                     label="세로"
-                    unit="Depth"
                     value={d}
-                    min={SIZE_LIMITS.MIN_DEPTH}
-                    max={SIZE_LIMITS.MAX_DEPTH}
+                    min={DEFAULT_SIZES.minDepth}
+                    max={DEFAULT_SIZES.maxDepth}
                     onChange={setD}
                   />
                   <DimensionSlider
                     label="높이"
-                    unit="Height"
                     value={h}
-                    min={SIZE_LIMITS.MIN_HEIGHT}
-                    max={SIZE_LIMITS.MAX_HEIGHT}
+                    min={DEFAULT_SIZES.minHeight}
+                    max={DEFAULT_SIZES.maxHeight}
                     onChange={setH}
                   />
                 </div>
@@ -87,7 +88,6 @@ export function CocosFitIntro({ onNavigate }: CocosFitIntroProps) {
                 </button>
               </div>
 
-              {/* Preview */}
               <div className="flex flex-col items-center justify-center border-t border-birch-200 bg-birch-50/50 p-8 sm:p-10 md:border-l md:border-t-0">
                 <SizePreview width={w} depth={d} height={h} />
                 <div className="mt-6 grid w-full max-w-xs grid-cols-3 gap-3 text-center">
@@ -115,20 +115,17 @@ export function CocosFitIntro({ onNavigate }: CocosFitIntroProps) {
 
 interface DimensionSliderProps {
   label: string;
-  unit: string;
   value: number;
   min: number;
   max: number;
   onChange: (v: number) => void;
 }
 
-function DimensionSlider({ label, unit, value, min, max, onChange }: DimensionSliderProps) {
+function DimensionSlider({ label, value, min, max, onChange }: DimensionSliderProps) {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <label className="text-sm font-medium text-charcoal">
-          {label} <span className="text-charcoal-muted">· {unit}</span>
-        </label>
+        <label className="text-sm font-medium text-charcoal">{label}</label>
         <div className="flex items-center gap-1.5">
           <input
             type="number"
@@ -149,7 +146,7 @@ function DimensionSlider({ label, unit, value, min, max, onChange }: DimensionSl
         value={value}
         min={min}
         max={max}
-        step={5}
+        step={10}
         onChange={(e) => onChange(Number(e.target.value))}
         className="mt-3 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-birch-200 accent-charcoal"
       />

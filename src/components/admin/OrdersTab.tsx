@@ -1,10 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
-import { Trash2, Eye, ChevronDown, ChevronUp, Loader2, RefreshCw } from "lucide-react";
+import { Trash2, ChevronDown, ChevronUp, Loader2, RefreshCw } from "lucide-react";
 import { fetchAllOrders, updateOrderStatus, deleteOrder } from "@/lib/api";
 import type { OrderRow } from "@/types/database";
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, type OrderStatus } from "@/lib/supabase";
 import { formatWon } from "@/lib/pricing";
-import { DESIGNS } from "@/config/designs";
 
 interface OrdersTabProps {
   onCountChange: (n: number) => void;
@@ -61,7 +60,7 @@ export function OrdersTab({ onCountChange }: OrdersTabProps) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-serif text-2xl text-charcoal sm:text-3xl">주문 관리</h1>
-          <p className="mt-2 text-sm text-charcoal-muted">접수된 주문제작 신청 목록입니다.</p>
+          <p className="mt-2 text-sm text-charcoal-muted">접수된 주문 신청 목록입니다.</p>
         </div>
         <button onClick={load} className="btn-ghost text-sm">
           <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
@@ -73,7 +72,6 @@ export function OrdersTab({ onCountChange }: OrdersTabProps) {
         <div className="mt-6 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
 
-      {/* Filter */}
       <div className="mt-6 flex flex-wrap gap-2">
         <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>
           전체 ({orders.length})
@@ -146,7 +144,6 @@ function OrderCard({
   onStatusChange: (id: string, status: OrderStatus) => void;
   onDelete: (id: string) => void;
 }) {
-  const design = DESIGNS.find((d) => d.id === order.design_id);
   const status = order.status as OrderStatus;
   const created = new Date(order.created_at);
 
@@ -162,7 +159,7 @@ function OrderCard({
               </span>
             </div>
             <p className="mt-1 text-xs text-charcoal-muted">
-              {order.dog_name || "-"} · {order.width}×{order.depth}×{order.height}mm · {formatWon(order.total_price)}
+              {order.product_name || "-"} · {order.width}×{order.depth}×{order.height}mm · {formatWon(order.total_price)}
             </p>
             <p className="mt-0.5 text-[10px] text-charcoal-muted">
               {created.toLocaleDateString("ko-KR")} {created.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
@@ -176,24 +173,11 @@ function OrderCard({
         <div className="border-t border-birch-200 p-5">
           <div className="grid gap-6 sm:grid-cols-2">
             <div>
-              <h4 className="text-xs font-semibold text-charcoal-muted">반려견 정보</h4>
+              <h4 className="text-xs font-semibold text-charcoal-muted">제작 정보</h4>
               <div className="mt-2 space-y-1.5 text-sm">
-                <DetailRow label="이름" value={order.dog_name || "-"} />
-                <DetailRow label="견종" value={order.breed || "-"} />
-                <DetailRow label="몸무게" value={order.weight || "-"} />
-                <DetailRow label="몸길이" value={order.body_length ? `${order.body_length}cm` : "-"} />
-                {order.memo && <DetailRow label="메모" value={order.memo} />}
-              </div>
-
-              <h4 className="mt-4 text-xs font-semibold text-charcoal-muted">제작 정보</h4>
-              <div className="mt-2 space-y-1.5 text-sm">
+                <DetailRow label="상품" value={order.product_name || "-"} />
                 <DetailRow label="사이즈" value={`${order.width} × ${order.depth} × ${order.height}mm`} />
-                <DetailRow label="디자인" value={design ? `${design.code} ${design.nameKr}` : order.design_id} />
-                <DetailRow label="출입구" value={`${doorLabel(order.door_position)} / ${order.door_size_mode === "custom" ? "직접입력" : "추천"}`} />
-                <DetailRow label="각인" value={order.engraving === "yes" ? `있음 (${order.engraving_text || "-"})` : "없음"} />
-                <DetailRow label="바닥판" value={order.floor_type === "removable" ? "탈착식" : "기본"} />
-                <DetailRow label="쿠션" value={order.cushion === "add" ? "추가" : "없음"} />
-                <DetailRow label="상판" value={order.top_type === "storage" ? "수납형" : "기본"} />
+                {order.memo && <DetailRow label="메모" value={order.memo} />}
               </div>
             </div>
 
@@ -241,12 +225,6 @@ function OrderCard({
       )}
     </div>
   );
-}
-
-function doorLabel(p: string): string {
-  if (p === "front") return "정면";
-  if (p === "left") return "좌측";
-  return "우측";
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {

@@ -1,14 +1,15 @@
 import { useEffect, useState, useCallback } from "react";
-import { LogOut, LayoutDashboard, Package, Images, Star, Settings, Menu, X } from "lucide-react";
+import { LogOut, LayoutDashboard, Package, Boxes, Images, Star, Settings, Menu, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { BRAND } from "@/config/brand";
 import { OrdersTab } from "@/components/admin/OrdersTab";
+import { ProductsTab } from "@/components/admin/ProductsTab";
 import { PortfolioTab } from "@/components/admin/PortfolioTab";
 import { ReviewsTab } from "@/components/admin/ReviewsTab";
 import { SettingsTab } from "@/components/admin/SettingsTab";
 
-type TabId = "dashboard" | "orders" | "portfolio" | "reviews" | "settings";
+type TabId = "dashboard" | "orders" | "products" | "portfolio" | "reviews" | "settings";
 
 interface AdminDashboardProps {
   onNavigate: (to: string) => void;
@@ -28,6 +29,7 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
   const navItems: { id: TabId; label: string; icon: typeof LayoutDashboard }[] = [
     { id: "dashboard", label: "대시보드", icon: LayoutDashboard },
     { id: "orders", label: "주문 관리", icon: Package },
+    { id: "products", label: "상품 관리", icon: Boxes },
     { id: "portfolio", label: "포트폴리오", icon: Images },
     { id: "reviews", label: "후기 관리", icon: Star },
     { id: "settings", label: "설정", icon: Settings },
@@ -40,7 +42,6 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
 
   return (
     <div className="min-h-screen bg-birch-50">
-      {/* Mobile top bar */}
       <div className="sticky top-0 z-30 flex items-center justify-between border-b border-birch-200 bg-white px-5 py-3 lg:hidden">
         <span className="text-sm font-bold text-charcoal">{BRAND.nameEn} Admin</span>
         <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-charcoal">
@@ -49,7 +50,6 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
       </div>
 
       <div className="flex">
-        {/* Sidebar */}
         <aside
           className={`fixed inset-y-0 left-0 z-40 w-60 transform border-r border-birch-200 bg-white transition-transform lg:sticky lg:top-0 lg:translate-x-0 ${
             sidebarOpen ? "translate-x-0" : "-translate-x-full"
@@ -62,7 +62,7 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
               <p className="text-xs text-charcoal-muted">관리자 페이지</p>
             </div>
 
-            <nav className="flex-1 space-y-1 p-3">
+            <nav className="flex-1 space-y-1 overflow-y-auto p-3">
               {navItems.map((item) => (
                 <button
                   key={item.id}
@@ -99,12 +99,12 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
           />
         )}
 
-        {/* Main content */}
         <main className="min-h-screen flex-1 px-5 py-8 sm:px-8 lg:px-12">
           {tab === "dashboard" && (
             <DashboardHome onTabChange={handleTabChange} orderCount={orderCount} setOrderCount={setOrderCount} />
           )}
           {tab === "orders" && <OrdersTab onCountChange={setOrderCount} />}
+          {tab === "products" && <ProductsTab />}
           {tab === "portfolio" && <PortfolioTab />}
           {tab === "reviews" && <ReviewsTab />}
           {tab === "settings" && <SettingsTab />}
@@ -123,30 +123,33 @@ function DashboardHome({
   orderCount: number | null;
   setOrderCount: (n: number) => void;
 }) {
-  const [stats, setStats] = useState<{ orders: number; portfolio: number; reviews: number } | null>(null);
+  const [stats, setStats] = useState<{ orders: number; products: number; portfolio: number; reviews: number } | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const [orders, portfolio, reviews] = await Promise.all([
+        const [orders, products, portfolio, reviews] = await Promise.all([
           supabase.from("orders").select("id", { count: "exact", head: true }),
+          supabase.from("products").select("id", { count: "exact", head: true }),
           supabase.from("portfolio_items").select("id", { count: "exact", head: true }),
           supabase.from("reviews").select("id", { count: "exact", head: true }),
         ]);
         setStats({
           orders: orders.count ?? 0,
+          products: products.count ?? 0,
           portfolio: portfolio.count ?? 0,
           reviews: reviews.count ?? 0,
         });
         setOrderCount(orders.count ?? 0);
       } catch {
-        setStats({ orders: 0, portfolio: 0, reviews: 0 });
+        setStats({ orders: 0, products: 0, portfolio: 0, reviews: 0 });
       }
     })();
   }, [setOrderCount]);
 
   const cards = [
     { label: "총 주문", value: stats?.orders ?? orderCount ?? "-", tab: "orders" as TabId, icon: Package },
+    { label: "상품", value: stats?.products ?? "-", tab: "products" as TabId, icon: Boxes },
     { label: "포트폴리오", value: stats?.portfolio ?? "-", tab: "portfolio" as TabId, icon: Images },
     { label: "후기", value: stats?.reviews ?? "-", tab: "reviews" as TabId, icon: Star },
   ];
@@ -156,7 +159,7 @@ function DashboardHome({
       <h1 className="font-serif text-2xl text-charcoal sm:text-3xl">대시보드</h1>
       <p className="mt-2 text-sm text-charcoal-muted">코코스퍼니쳐 관리 현황을 한눈에 확인하세요.</p>
 
-      <div className="mt-8 grid gap-5 sm:grid-cols-3">
+      <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((card) => (
           <button
             key={card.label}
@@ -178,11 +181,11 @@ function DashboardHome({
           <button onClick={() => onTabChange("orders")} className="btn-outline text-sm">
             주문 확인하기
           </button>
+          <button onClick={() => onTabChange("products")} className="btn-outline text-sm">
+            상품 추가
+          </button>
           <button onClick={() => onTabChange("portfolio")} className="btn-outline text-sm">
             포트폴리오 추가
-          </button>
-          <button onClick={() => onTabChange("reviews")} className="btn-outline text-sm">
-            후기 관리
           </button>
           <button onClick={() => onTabChange("settings")} className="btn-outline text-sm">
             가격 설정

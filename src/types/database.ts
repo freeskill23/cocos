@@ -1,29 +1,32 @@
+export interface ProductRow {
+  id: string;
+  name: string;
+  description: string;
+  image_url: string | null;
+  base_width: number;
+  base_depth: number;
+  base_height: number;
+  base_price: number;
+  is_active: boolean;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface OrderRow {
   id: string;
-  dog_name: string | null;
-  breed: string | null;
-  weight: string | null;
-  body_length: string | null;
-  memo: string | null;
+  product_id: string | null;
+  product_name: string | null;
   width: number;
   depth: number;
   height: number;
-  design_id: string;
-  door_position: string;
-  door_size_mode: string;
-  door_custom_width: number;
-  door_custom_height: number;
-  engraving: string;
-  engraving_text: string;
-  floor_type: string;
-  cushion: string;
-  top_type: string;
   total_price: number;
   customer_name: string;
   customer_phone: string;
   customer_email: string | null;
   customer_address: string;
   customer_detail_address: string | null;
+  memo: string | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -55,21 +58,28 @@ export interface ReviewRow {
   created_at: string;
 }
 
+export interface PricingSettings {
+  baseFee: number;
+  areaRatePerSqmm: number;
+  sizeScaleRate: number;
+  packagingFee: number;
+  shippingFee: number;
+  freeShippingThreshold: number;
+  perCmWidth: number;
+  perCmDepth: number;
+  perCmHeight: number;
+}
+
+export interface SizeSettings {
+  minWidth: number;
+  maxWidth: number;
+  minDepth: number;
+  maxDepth: number;
+  minHeight: number;
+  maxHeight: number;
+}
+
 export interface SettingsMap {
-  pricing?: {
-    baseFee: number;
-    areaRatePerSqmm: number;
-    sizeScaleRate: number;
-    packagingFee: number;
-    shippingFee: number;
-    freeShippingThreshold: number;
-  };
-  sizes?: {
-    minWidth: number;
-    maxWidth: number;
-    minDepth: number;
-    maxDepth: number;
-    minHeight: number;
-    maxHeight: number;
-  };
+  pricing?: PricingSettings;
+  sizes?: SizeSettings;
 }
