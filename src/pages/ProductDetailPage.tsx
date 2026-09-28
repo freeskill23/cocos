@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Loader2, Package } from "lucide-react";
 import { fetchProductById } from "@/lib/api";
 import type { ProductRow } from "@/types/database";
 import { formatWon } from "@/lib/pricing";
+import { parseDetailContent } from "@/components/admin/DetailEditor";
 
 interface ProductDetailPageProps {
   productId: string;
@@ -87,8 +88,25 @@ export function ProductDetailPage({ productId, onNavigate, onOrder }: ProductDet
               {product.detail_content && (
                 <div className="mt-8">
                   <h2 className="text-base font-semibold text-charcoal">상세 정보</h2>
-                  <div className="mt-3 whitespace-pre-line text-sm leading-relaxed text-charcoal-light">
-                    {product.detail_content}
+                  <div className="mt-4 space-y-4">
+                    {parseDetailContent(product.detail_content).map((block) =>
+                      block.type === "text" ? (
+                        block.text ? (
+                          <p key={block.id} className="whitespace-pre-line text-sm leading-relaxed text-charcoal-light">
+                            {block.text}
+                          </p>
+                        ) : null
+                      ) : (
+                        block.imageUrl ? (
+                          <img
+                            key={block.id}
+                            src={block.imageUrl}
+                            alt="상세 이미지"
+                            className="w-full rounded-xl border border-birch-200"
+                          />
+                        ) : null
+                      )
+                    )}
                   </div>
                 </div>
               )}

@@ -4,6 +4,7 @@ import { fetchAllProducts, upsertProduct, deleteProduct } from "@/lib/api";
 import type { ProductRow } from "@/types/database";
 import { formatWon } from "@/lib/pricing";
 import { ImageUpload } from "@/components/admin/ImageUpload";
+import { DetailEditor } from "@/components/admin/DetailEditor";
 
 export function ProductsTab() {
   const [items, setItems] = useState<ProductRow[]>([]);
@@ -209,14 +210,8 @@ function ProductEditor({
             maxHeight={1200}
           />
 
-          <FormField label="상세 페이지 내용">
-            <textarea
-              value={detailContent}
-              onChange={(e) => setDetailContent(e.target.value)}
-              rows={6}
-              className="input-field resize-y"
-              placeholder="상세 페이지에 표시될 상세 설명을 입력하세요.&#10;특징, 소재, 제작 방식 등을 자유롭게 작성할 수 있습니다."
-            />
+          <FormField label="상세 페이지 구성">
+            <DetailEditor value={detailContent} onChange={setDetailContent} />
           </FormField>
 
           <div className="rounded-2xl bg-birch-50 p-4">
