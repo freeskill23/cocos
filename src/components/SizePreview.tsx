@@ -47,6 +47,7 @@ export function SizePreview({
           fill="#F5EFE6"
           stroke="#CDB99E"
           strokeWidth="1.5"
+          style={{ transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)" }}
         />
         {/* Right face (depth) */}
         <polygon
@@ -54,6 +55,7 @@ export function SizePreview({
           fill="#EDE3D3"
           stroke="#CDB99E"
           strokeWidth="1.5"
+          style={{ transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)" }}
         />
         {/* Front face */}
         <rect
@@ -64,6 +66,7 @@ export function SizePreview({
           fill="#FBF8F3"
           stroke="#B8A07E"
           strokeWidth="2"
+          style={{ transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)" }}
         />
         {/* Door opening */}
         <rect
@@ -75,6 +78,7 @@ export function SizePreview({
           stroke="#CDB99E"
           strokeWidth="1.5"
           rx="4"
+          style={{ transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)" }}
         />
         {/* Top face (depth perspective) */}
         <polygon
@@ -82,16 +86,17 @@ export function SizePreview({
           fill="#E0D0BA"
           stroke="#CDB99E"
           strokeWidth="1.5"
+          style={{ transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)" }}
         />
 
         {/* Dimension labels */}
-        <text x={cx} y={groundY + 18} textAnchor="middle" className="fill-charcoal text-[11px] font-medium">
+        <text x={cx} y={groundY + 18} textAnchor="middle" className="fill-charcoal text-[11px] font-medium" style={{ transition: "all 0.3s ease" }}>
           가로 {width}mm
         </text>
-        <text x={cx + boxW / 2 + depthOffset / 2 + 8} y={groundY - boxH / 2} textAnchor="start" className="fill-charcoal-muted text-[10px]">
+        <text x={cx + boxW / 2 + depthOffset / 2 + 8} y={groundY - boxH / 2} textAnchor="start" className="fill-charcoal-muted text-[10px]" style={{ transition: "all 0.3s ease" }}>
           높이 {height}mm
         </text>
-        <text x={cx + boxW / 2 + depthOffset / 4} y={groundY - boxH - 8} textAnchor="middle" className="fill-charcoal-muted text-[10px]">
+        <text x={cx + boxW / 2 + depthOffset / 4} y={groundY - boxH - 8} textAnchor="middle" className="fill-charcoal-muted text-[10px]" style={{ transition: "all 0.3s ease" }}>
           세로 {depth}mm
         </text>
       </svg>

@@ -6,6 +6,7 @@ import type { ProductRow, SelectedOption } from "@/types/database";
 import { DEFAULT_PRICING, DEFAULT_SIZES, type PricingSettings, type SizeSettings } from "@/config/pricing";
 import { calculatePrice, formatWon } from "@/lib/pricing";
 import { parseDetailContent } from "@/components/admin/DetailEditor";
+import { SizePreview } from "@/components/SizePreview";
 
 interface ProductDetailPageProps {
   productId: string;
@@ -188,7 +189,17 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
                   {product.size_customizable && (
                     <div className="mt-5 rounded-2xl border border-birch-200 bg-white p-5">
                       <p className="text-xs font-semibold text-charcoal">사이즈 조절 (mm)</p>
-                      <div className="mt-3 space-y-3">
+                      <div className="mt-3 mb-4 rounded-xl bg-birch-50/60 py-3">
+                        <SizePreview
+                          width={dimensions.width}
+                          depth={dimensions.depth}
+                          height={dimensions.height}
+                          maxW={sizes.maxWidth}
+                          maxD={sizes.maxDepth}
+                          maxH={sizes.maxHeight}
+                        />
+                      </div>
+                      <div className="space-y-3">
                         <SizeSlider label="가로" value={dimensions.width} min={sizes.minWidth} max={sizes.maxWidth}
                           onChange={(v) => setDimensions({ ...dimensions, width: v })} />
                         <SizeSlider label="세로" value={dimensions.depth} min={sizes.minDepth} max={sizes.maxDepth}
