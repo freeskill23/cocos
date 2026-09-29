@@ -23,7 +23,8 @@ export async function requestCardPayment(
     channelKey: params.channelKey,
     paymentId: params.paymentId,
     orderName: params.orderName,
-    totalAmount: { currency: "KRW", amount: params.totalAmount },
+    totalAmount: params.totalAmount,
+    currency: "KRW",
     payMethod: "CARD",
     productType: "PHYSICAL",
     customer: {
