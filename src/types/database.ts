@@ -14,6 +14,7 @@ export interface SelectedOption {
   optionName: string;
   valueLabel: string;
   price: number;
+  quantity: number;
 }
 
 export interface CategoryRow {

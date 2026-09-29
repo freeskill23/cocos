@@ -19,6 +19,7 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedOptionValueIds, setSelectedOptionValueIds] = useState<Record<string, string>>({});
+  const [optionQuantities, setOptionQuantities] = useState<Record<string, number>>({});
   const [dimensions, setDimensions] = useState({ width: 0, depth: 0, height: 0 });
   const [quantity, setQuantity] = useState(1);
   const [adding, setAdding] = useState(false);
@@ -64,15 +65,17 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
     .filter((opt) => selectedOptionValueIds[opt.id])
     .map((opt) => {
       const val = opt.values.find((v) => v.id === selectedOptionValueIds[opt.id]);
+      const qty = optionQuantities[opt.id] ?? 1;
       return {
         optionName: opt.name,
         valueLabel: val?.label ?? "",
         price: val?.price ?? 0,
+        quantity: qty,
       };
     })
     .filter((s) => s.valueLabel);
 
-  const optionsTotal = selectedOptions.reduce((sum, s) => sum + s.price, 0);
+  const optionsTotal = selectedOptions.reduce((sum, s) => sum + s.price * s.quantity, 0);
   const breakdown = product
     ? calculatePrice({ product, dimensions, pricing }, sizes)
     : null;
@@ -205,38 +208,116 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
 
                   {(product.options ?? []).length > 0 && (
                     <div className="mt-5 rounded-2xl border border-birch-200 bg-white p-5">
-                      <p className="text-xs font-semibold text-charcoal">추가 옵션</p>
-                      <div className="mt-3 space-y-3">
-                        {(product.options ?? []).map((opt) => (
-                          <div key={opt.id}>
-                            <p className="text-xs text-charcoal-muted">{opt.name}</p>
-                            <div className="mt-1.5 flex flex-wrap gap-1.5">
-                              {opt.values.map((val) => {
-                                const isSelected = selectedOptionValueIds[opt.id] === val.id;
-                                return (
-                                  <button
-                                    key={val.id}
-                                    onClick={() => setSelectedOptionValueIds({ ...selectedOptionValueIds, [opt.id]: val.id })}
-                                    className={`rounded-lg border-2 px-3 py-1.5 text-xs font-medium transition-all ${
-                                      isSelected ? "border-charcoal bg-charcoal text-ivory" : "border-birch-200 bg-white text-charcoal hover:border-birch-400"
-                                    }`}
-                                  >
-                                    {val.label}
-                                    {val.price > 0 && ` +${formatWon(val.price)}`}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ))}
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-charcoal">추가 옵션</p>
+                        {optionsTotal > 0 && (
+                          <span className="text-xs font-bold text-birch-600">+{formatWon(optionsTotal)}</span>
+                        )}
                       </div>
-                      {optionsTotal > 0 && (
-                        <div className="mt-3 border-t border-birch-100 pt-3 text-xs text-charcoal-muted">
-                          옵션 추가 금액: +{formatWon(optionsTotal)}
-                        </div>
-                      )}
+                      <div className="mt-3 space-y-3">
+                        {(product.options ?? []).map((opt) => {
+                          const selectedValId = selectedOptionValueIds[opt.id];
+                          const selectedVal = opt.values.find((v) => v.id === selectedValId);
+                          const optQty = optionQuantities[opt.id] ?? 1;
+                          return (
+                            <div key={opt.id}>
+                              <div className="flex items-center gap-2">
+                                <select
+                                  value={selectedValId ?? ""}
+                                  onChange={(e) => {
+                                    setSelectedOptionValueIds({ ...selectedOptionValueIds, [opt.id]: e.target.value });
+                                    if (e.target.value && !optionQuantities[opt.id]) {
+                                      setOptionQuantities({ ...optionQuantities, [opt.id]: 1 });
+                                    }
+                                  }}
+                                  className="flex-1 rounded-lg border border-birch-200 bg-white px-3 py-2 text-sm text-charcoal focus:border-birch-400 focus:outline-none focus:ring-2 focus:ring-birch-200"
+                                >
+                                  <option value="">{opt.name} 선택</option>
+                                  {opt.values.map((val) => (
+                                    <option key={val.id} value={val.id}>
+                                      {val.label}{val.price > 0 ? ` (+${formatWon(val.price)})` : ""}
+                                    </option>
+                                  ))}
+                                </select>
+                                {selectedValId && (
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => setOptionQuantities({ ...optionQuantities, [opt.id]: Math.max(1, optQty - 1) })}
+                                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-birch-200 text-charcoal"
+                                    >
+                                      <Minus size={12} />
+                                    </button>
+                                    <span className="w-8 text-center text-sm font-medium text-charcoal">{optQty}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setOptionQuantities({ ...optionQuantities, [opt.id]: optQty + 1 })}
+                                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-birch-200 text-charcoal"
+                                    >
+                                      <Plus size={12} />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                              {selectedVal && selectedVal.price > 0 && (
+                                <p className="mt-1.5 text-xs text-birch-600">
+                                  +{formatWon(selectedVal.price)} × {optQty} = +{formatWon(selectedVal.price * optQty)}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
+
+                  <div className="mt-5 rounded-2xl bg-birch-50 p-5">
+                    <p className="text-xs font-semibold text-charcoal">가격 상세</p>
+                    <div className="mt-3 space-y-1.5 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-charcoal-muted">기본 가격</span>
+                        <span className="font-medium text-charcoal">{formatWon(breakdown?.basePrice ?? product.base_price)}</span>
+                      </div>
+                      {breakdown && breakdown.widthAdjust > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-charcoal-muted">가로 추가 ({Math.round((dimensions.width - product.base_width) / 10)}cm)</span>
+                          <span className="font-medium text-charcoal">+{formatWon(breakdown.widthAdjust)}</span>
+                        </div>
+                      )}
+                      {breakdown && breakdown.depthAdjust > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-charcoal-muted">세로 추가 ({Math.round((dimensions.depth - product.base_depth) / 10)}cm)</span>
+                          <span className="font-medium text-charcoal">+{formatWon(breakdown.depthAdjust)}</span>
+                        </div>
+                      )}
+                      {breakdown && breakdown.heightAdjust > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-charcoal-muted">높이 추가 ({Math.round((dimensions.height - product.base_height) / 10)}cm)</span>
+                          <span className="font-medium text-charcoal">+{formatWon(breakdown.heightAdjust)}</span>
+                        </div>
+                      )}
+                      {selectedOptions.map((opt) => (
+                        <div key={opt.optionName} className="flex justify-between">
+                          <span className="text-charcoal-muted">{opt.optionName}: {opt.valueLabel}{opt.quantity > 1 ? ` × ${opt.quantity}` : ""}</span>
+                          {opt.price > 0
+                            ? <span className="font-medium text-birch-600">+{formatWon(opt.price * opt.quantity)}</span>
+                            : <span className="font-medium text-charcoal-muted">포함</span>
+                          }
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 flex items-center justify-between border-t border-birch-200 pt-3">
+                      <span className="text-xs text-charcoal-muted">단가 × {quantity}개</span>
+                      <span className="text-base font-bold text-charcoal">{formatWon(unitPrice * quantity)}</span>
+                    </div>
+                    {(breakdown?.packagingFee ?? 0) + (breakdown?.shippingFee ?? 0) > 0 && (
+                      <div className="mt-1.5 flex items-center justify-between text-[11px] text-charcoal-muted">
+                        <span>+ 포장비 {formatWon(breakdown?.packagingFee ?? 0)}</span>
+                        {(breakdown?.shippingFee ?? 0) > 0 && <span>+ 배송비 {formatWon(breakdown?.shippingFee ?? 0)}</span>}
+                        <span className="ml-auto">(주문 시 추가)</span>
+                      </div>
+                    )}
+                  </div>
 
                   <div className="mt-5 flex items-center gap-4">
                     <div className="flex items-center gap-2">
@@ -249,8 +330,8 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
                       </button>
                     </div>
                     <div className="flex-1 text-right">
-                      <p className="text-xs text-charcoal-muted">총 금액</p>
-                      <p className="text-xl font-bold text-charcoal">{formatWon((unitPrice * quantity) + (breakdown?.packagingFee ?? 0) + (breakdown?.shippingFee ?? 0))}</p>
+                      <p className="text-xs text-charcoal-muted">상품 금액</p>
+                      <p className="text-xl font-bold text-charcoal">{formatWon(unitPrice * quantity)}</p>
                     </div>
                   </div>
 
