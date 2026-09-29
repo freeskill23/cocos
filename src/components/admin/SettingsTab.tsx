@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import { Save, Loader2, AlertCircle, Check } from "lucide-react";
+import { Save, Loader2, AlertCircle, Check, Plus, Trash2 } from "lucide-react";
 import { fetchSettings, upsertSetting } from "@/lib/api";
-import type { PricingSettings, SizeSettings } from "@/types/database";
+import type { PricingSettings, SizeSettings, BankAccount } from "@/types/database";
 import { DEFAULT_PRICING, DEFAULT_SIZES } from "@/config/pricing";
 
 export function SettingsTab() {
   const [pricing, setPricing] = useState<PricingSettings>(DEFAULT_PRICING);
   const [sizes, setSizes] = useState<SizeSettings>(DEFAULT_SIZES);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -18,6 +19,7 @@ export function SettingsTab() {
         const settings = await fetchSettings();
         if (settings.pricing) setPricing((prev) => ({ ...prev, ...settings.pricing! }));
         if (settings.sizes) setSizes((prev) => ({ ...prev, ...settings.sizes! }));
+        if (settings.bank_accounts) setBankAccounts(settings.bank_accounts);
       } catch (err) {
         setError(err instanceof Error ? err.message : "설정을 불러오지 못했습니다.");
       } finally {
@@ -34,6 +36,7 @@ export function SettingsTab() {
       await Promise.all([
         upsertSetting("pricing", pricing),
         upsertSetting("sizes", sizes),
+        upsertSetting("bank_accounts", bankAccounts),
       ]);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -118,6 +121,53 @@ export function SettingsTab() {
             <NumberField label="높이 최소 (mm)" value={sizes.minHeight} onChange={(v) => setSizes({ ...sizes, minHeight: v })} />
             <NumberField label="높이 최대 (mm)" value={sizes.maxHeight} onChange={(v) => setSizes({ ...sizes, maxHeight: v })} />
           </div>
+        </div>
+      </div>
+
+      <div className="mt-6 rounded-3xl border border-birch-200 bg-white p-6">
+        <h2 className="text-base font-semibold text-charcoal">무통장입금 계좌 관리</h2>
+        <p className="mt-1 text-xs text-charcoal-muted">주문 완료 화면에 표시될 입금 계좌 정보입니다. 여러 개를 등록할 수 있습니다.</p>
+        <div className="mt-6 space-y-3">
+          {bankAccounts.map((acc) => (
+            <div key={acc.id} className="flex items-center gap-3 rounded-xl border border-birch-200 bg-birch-50/50 p-4">
+              <div className="grid flex-1 gap-3 sm:grid-cols-3">
+                <input
+                  type="text"
+                  value={acc.bank}
+                  onChange={(e) => setBankAccounts(bankAccounts.map((a) => a.id === acc.id ? { ...a, bank: e.target.value } : a))}
+                  placeholder="은행명 (예: 국민은행)"
+                  className="input-field"
+                />
+                <input
+                  type="text"
+                  value={acc.accountNumber}
+                  onChange={(e) => setBankAccounts(bankAccounts.map((a) => a.id === acc.id ? { ...a, accountNumber: e.target.value } : a))}
+                  placeholder="계좌번호 (예: 123-456-7890)"
+                  className="input-field"
+                />
+                <input
+                  type="text"
+                  value={acc.accountHolder}
+                  onChange={(e) => setBankAccounts(bankAccounts.map((a) => a.id === acc.id ? { ...a, accountHolder: e.target.value } : a))}
+                  placeholder="예금주 (예: 코코스퍼니쳐)"
+                  className="input-field"
+                />
+              </div>
+              <button
+                onClick={() => setBankAccounts(bankAccounts.filter((a) => a.id !== acc.id))}
+                className="shrink-0 rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={() => setBankAccounts([...bankAccounts, { id: crypto.randomUUID(), bank: "", accountNumber: "", accountHolder: "" }])}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-birch-200 px-4 py-2.5 text-xs font-medium text-charcoal transition-colors hover:bg-birch-50"
+          >
+            <Plus size={14} />
+            계좌 추가
+          </button>
         </div>
       </div>
 

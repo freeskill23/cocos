@@ -1,9 +1,11 @@
-import { useState } from "react";
-import { Loader2, Check, ArrowRight, User, Mail, Lock } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Loader2, Check, ArrowRight, User, Mail, Lock, Copy, Building2, Info } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 import { useAuth } from "@/hooks/useAuth";
-import { insertOrder, type OrderInsert } from "@/lib/api";
+import { insertOrder, fetchSettings, type OrderInsert } from "@/lib/api";
 import { formatWon } from "@/lib/pricing";
+import { BRAND } from "@/config/brand";
+import type { BankAccount } from "@/types/database";
 
 interface CheckoutPageProps {
   onNavigate: (to: string) => void;
@@ -29,6 +31,14 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetchSettings().then((settings) => {
+      if (settings.bank_accounts) setBankAccounts(settings.bank_accounts);
+    });
+  }, []);
 
   const total = items.reduce((sum, i) => sum + i.unit_price * i.quantity, 0);
   const isValid = customer.name.trim() && customer.phone.trim() && customer.address.trim();
@@ -81,20 +91,84 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
     }
   };
 
+  const handleCopyAccount = (acc: BankAccount, idx: number) => {
+    const text = `${acc.bank} ${acc.accountNumber} ${acc.accountHolder}`;
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedIdx(idx);
+      setTimeout(() => setCopiedIdx(null), 2000);
+    });
+  };
+
   if (submitted) {
     return (
       <main className="min-h-screen bg-ivory pt-20 md:pt-24">
-        <div className="mx-auto max-w-2xl px-5 py-16 text-center">
-          <div className="flex h-20 w-20 mx-auto items-center justify-center rounded-full bg-green-100">
-            <Check size={36} className="text-green-600" />
+        <div className="mx-auto max-w-2xl px-5 py-16">
+          <div className="text-center">
+            <div className="flex h-20 w-20 mx-auto items-center justify-center rounded-full bg-green-100">
+              <Check size={36} className="text-green-600" />
+            </div>
+            <h2 className="mt-8 font-serif text-3xl text-charcoal">주문 접수 완료</h2>
+            <p className="mt-4 text-sm text-charcoal-muted">
+              {customer.name}님, 주문해주셔서 감사합니다.
+              <br />
+              아래 계좌로 입금해주시면 확인 후 제작을 시작합니다.
+            </p>
           </div>
-          <h2 className="mt-8 font-serif text-3xl text-charcoal">주문 완료</h2>
-          <p className="mt-4 text-sm text-charcoal-muted">
-            {customer.name}님, 주문해주셔서 감사합니다.
-            <br />
-            확인 후 1영업일 이내에 연락드리겠습니다.
-          </p>
-          <button onClick={() => onNavigate("/")} className="btn-primary mt-10">홈으로</button>
+
+          <div className="mt-10 rounded-3xl border border-birch-200 bg-white p-6 sm:p-8">
+            <div className="flex items-end justify-between border-b border-birch-200 pb-4">
+              <span className="text-sm text-charcoal-muted">총 결제 금액</span>
+              <span className="font-serif text-3xl font-bold text-charcoal">{formatWon(total)}</span>
+            </div>
+
+            {bankAccounts.length > 0 ? (
+              <div className="mt-6 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Building2 size={16} className="text-birch-500" />
+                  <h3 className="text-sm font-semibold text-charcoal">입금 계좌 안내</h3>
+                </div>
+                {bankAccounts.map((acc, idx) => (
+                  <div key={acc.id} className="rounded-xl border border-birch-200 bg-birch-50/60 p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-bold text-charcoal">{acc.bank}</p>
+                        <p className="mt-1 font-mono text-base text-charcoal">{acc.accountNumber}</p>
+                        <p className="mt-0.5 text-xs text-charcoal-muted">예금주: {acc.accountHolder}</p>
+                      </div>
+                      <button
+                        onClick={() => handleCopyAccount(acc, idx)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-birch-200 bg-white px-3 py-2 text-xs font-medium text-charcoal transition-colors hover:bg-birch-100"
+                      >
+                        {copiedIdx === idx ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+                        {copiedIdx === idx ? "복사됨" : "계좌 복사"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <div className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-800">
+                  <p className="flex items-start gap-2">
+                    <Info size={14} className="mt-0.5 shrink-0" />
+                    <span>
+                      입금자명은 주문자명({customer.name})과 동일하게 해주세요.
+                      <br />
+                      입금 확인 후 1영업일 이내에 제작이 시작됩니다.
+                    </span>
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-6 rounded-xl bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                입금 계좌 정보가 관리자 설정에서 아직 등록되지 않았습니다. 별도로 연락드리겠습니다.
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6 flex justify-center gap-3">
+            <button onClick={() => onNavigate("/")} className="btn-outline">홈으로</button>
+            {session && (
+              <button onClick={() => onNavigate("/account")} className="btn-primary">내 주문 보기</button>
+            )}
+          </div>
         </div>
       </main>
     );
@@ -192,6 +266,24 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
           <Field label="메모" optional>
             <textarea value={customer.memo} onChange={(e) => setCustomer({ ...customer, memo: e.target.value })} rows={3} placeholder="요청사항" className="input-field resize-none" />
           </Field>
+        </div>
+
+        <div className="mt-6 rounded-3xl border border-birch-200 bg-white p-6 sm:p-8">
+          <h3 className="text-sm font-semibold text-charcoal">결제 방법</h3>
+          <div className="mt-4 rounded-xl bg-birch-50 p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white">
+                <Building2 size={20} className="text-birch-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-charcoal">무통장입금</p>
+                <p className="mt-0.5 text-xs text-charcoal-muted">주문 접수 후 안내된 계좌로 입금해주시면 확인 후 제작을 시작합니다.</p>
+              </div>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-charcoal-muted">
+            추후 카드결제, 계좌이체 등 PG 결제가 추가될 예정입니다.
+          </p>
         </div>
 
         <div className="mt-6 rounded-3xl border border-birch-200 bg-white p-6">

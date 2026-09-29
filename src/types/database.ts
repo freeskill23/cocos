@@ -136,7 +136,15 @@ export interface CartItemRow {
   created_at: string;
 }
 
+export interface BankAccount {
+  id: string;
+  bank: string;
+  accountHolder: string;
+  accountNumber: string;
+}
+
 export interface SettingsMap {
   pricing?: PricingSettings;
   sizes?: SizeSettings;
+  bank_accounts?: BankAccount[];
 }

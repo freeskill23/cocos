@@ -41,12 +41,23 @@ export function AccountPage({ onNavigate }: AccountPageProps) {
   }
 
   const statusLabels: Record<string, string> = {
-    pending: "결제 대기",
-    paid: "결제 완료",
-    preparing: "제작 중",
+    received: "접수 완료",
+    payment_pending: "입금 대기",
+    in_review: "검토 중",
+    in_production: "제작 중",
     shipped: "배송 중",
-    delivered: "배송 완료",
-    cancelled: "주문 취소",
+    completed: "완료",
+    cancelled: "취소",
+  };
+
+  const statusColors: Record<string, string> = {
+    received: "bg-birch-100 text-charcoal",
+    payment_pending: "bg-amber-100 text-amber-700",
+    in_review: "bg-amber-100 text-amber-700",
+    in_production: "bg-blue-100 text-blue-700",
+    shipped: "bg-blue-100 text-blue-700",
+    completed: "bg-green-100 text-green-700",
+    cancelled: "bg-red-100 text-red-700",
   };
 
   return (
@@ -94,9 +105,7 @@ export function AccountPage({ onNavigate }: AccountPageProps) {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className={`rounded-full px-3 py-1 text-xs font-medium ${
-                        order.status === "delivered" ? "bg-green-100 text-green-700" :
-                        order.status === "cancelled" ? "bg-red-100 text-red-700" :
-                        "bg-birch-100 text-charcoal"
+                        statusColors[order.status] ?? "bg-birch-100 text-charcoal"
                       }`}>
                         {statusLabels[order.status] ?? order.status}
                       </span>
