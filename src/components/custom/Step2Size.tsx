@@ -100,7 +100,8 @@ function SizeInput({
   perCm: number;
   onChange: (v: number) => void;
 }) {
-  const diffCm = Math.max(0, Math.round((value - base) / 10));
+  const clampedBase = Math.max(min, Math.min(max, base));
+  const diffCm = Math.max(0, Math.round((value - clampedBase) / 10));
   const adjust = diffCm * perCm;
 
   return (
@@ -136,7 +137,7 @@ function SizeInput({
       />
       <div className="mt-1.5 flex justify-between text-[10px] text-charcoal-muted">
         <span>최소 {min}mm</span>
-        <span>기본 {base}mm</span>
+        <span>기본 {clampedBase}mm</span>
         <span>최대 {max}mm</span>
       </div>
     </Field>

@@ -36,9 +36,16 @@ export function calculatePrice(input: PriceInput, sizes: SizeSettings = DEFAULT_
   const d = clampDimensions(input.dimensions, sizes);
   const p = input.pricing;
 
-  const widthDiffCm = Math.max(0, Math.round((d.width - input.product.base_width) / 10));
-  const depthDiffCm = Math.max(0, Math.round((d.depth - input.product.base_depth) / 10));
-  const heightDiffCm = Math.max(0, Math.round((d.height - input.product.base_height) / 10));
+  // Use clamped base dimensions as reference so no adjustment is shown
+  // when the user hasn't changed anything beyond allowed range.
+  const baseW = clampDimensions(
+    { width: input.product.base_width, depth: input.product.base_depth, height: input.product.base_height },
+    sizes,
+  );
+
+  const widthDiffCm = Math.max(0, Math.round((d.width - baseW.width) / 10));
+  const depthDiffCm = Math.max(0, Math.round((d.depth - baseW.depth) / 10));
+  const heightDiffCm = Math.max(0, Math.round((d.height - baseW.height) / 10));
 
   const basePrice = input.product.base_price;
   const widthAdjust = widthDiffCm * p.perCmWidth;

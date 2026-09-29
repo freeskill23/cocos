@@ -75,12 +75,18 @@ export function CustomPage({ onNavigate }: CustomPageProps) {
           return;
         }
         setProduct(p);
-        setDimensions(saved.dimensions);
-
-        // Restore pricing & sizes from settings
         const settings = await fetchSettings();
+        let clampedSizes: SizeSettings = DEFAULT_SIZES;
+        if (settings.sizes) {
+          setSizes(settings.sizes as SizeSettings);
+          clampedSizes = settings.sizes as SizeSettings;
+        }
+        setDimensions({
+          width: Math.max(clampedSizes.minWidth, Math.min(clampedSizes.maxWidth, saved.dimensions.width)),
+          depth: Math.max(clampedSizes.minDepth, Math.min(clampedSizes.maxDepth, saved.dimensions.depth)),
+          height: Math.max(clampedSizes.minHeight, Math.min(clampedSizes.maxHeight, saved.dimensions.height)),
+        });
         if (settings.pricing) setPricing(settings.pricing as PricingSettings);
-        if (settings.sizes) setSizes(settings.sizes as SizeSettings);
 
         setStep(saved.step);
       } catch {
@@ -110,9 +116,9 @@ export function CustomPage({ onNavigate }: CustomPageProps) {
       setPricing(pricingSettings);
       setSizes(sizeSettings);
       setDimensions({
-        width: p.base_width,
-        depth: p.base_depth,
-        height: p.base_height,
+        width: Math.max(sizeSettings.minWidth, Math.min(sizeSettings.maxWidth, p.base_width)),
+        depth: Math.max(sizeSettings.minDepth, Math.min(sizeSettings.maxDepth, p.base_depth)),
+        height: Math.max(sizeSettings.minHeight, Math.min(sizeSettings.maxHeight, p.base_height)),
       });
     },
     []
