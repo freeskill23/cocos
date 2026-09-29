@@ -26,7 +26,7 @@ export async function requestCardPayment(
     totalAmount: params.totalAmount,
     currency: "KRW",
     payMethod: "CARD",
-    productType: "PHYSICAL",
+    productType: "REAL",
     customer: {
       fullName: params.customerName,
       phoneNumber: params.customerPhone,
