@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Plus, Trash2, Edit3, X, Loader2, Eye, EyeOff, Save, Package, GripVertical } from "lucide-react";
 import { fetchAllProducts, upsertProduct, deleteProduct, fetchAllCategories } from "@/lib/api";
 import type { ProductRow, ProductOption, ProductOptionValue, CategoryRow } from "@/types/database";
@@ -173,6 +173,7 @@ function ProductEditor({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const backdropMouseDownTarget = useRef<EventTarget | null>(null);
 
   const handleSave = async () => {
     if (!name || basePrice <= 0) {
@@ -207,7 +208,16 @@ function ProductEditor({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+      onMouseDown={(e) => { backdropMouseDownTarget.current = e.target; }}
+      onClick={(e) => {
+        if (e.target === backdropMouseDownTarget.current && e.target === e.currentTarget) {
+          onClose();
+        }
+        backdropMouseDownTarget.current = null;
+      }}
+    >
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 sm:p-8" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="font-serif text-xl text-charcoal">{item ? "상품 수정" : "상품 추가"}</h2>
