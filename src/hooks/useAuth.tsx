@@ -37,8 +37,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({ email, password });
-    return { error: error?.message ?? null };
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) return { error: error.message };
+    if (data.user && !data.session) {
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (signInError) return { error: "가입은 완료되었으나 자동 로그인에 실패했습니다. 다시 로그인해주세요." };
+    }
+    return { error: null };
   };
 
   const signOut = async () => {

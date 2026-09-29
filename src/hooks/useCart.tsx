@@ -39,6 +39,7 @@ interface CartContextType {
   count: number;
   refresh: () => Promise<void>;
   add: (params: AddToCartParams) => Promise<void>;
+  buyNow: (params: AddToCartParams) => Promise<void>;
   updateQuantity: (id: string, quantity: number) => Promise<void>;
   remove: (id: string) => Promise<void>;
   clear: () => Promise<void>;
@@ -54,9 +55,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const owner = supabase.auth.getUser
-        ? { session_id: sessionId }
-        : { session_id: sessionId };
+      const { data: userData } = await supabase.auth.getUser();
+      const owner = userData.user ? { user_id: userData.user.id } : { session_id: sessionId };
       const data = await fetchCartItems(owner);
       setItems(data);
     } catch {
@@ -92,6 +92,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
     [sessionId, refresh]
   );
 
+  const buyNow = useCallback(
+    async (params: AddToCartParams) => {
+      await add(params);
+    },
+    [add]
+  );
+
   const updateQuantity = useCallback(
     async (id: string, quantity: number) => {
       await updateCartQuantity(id, quantity);
@@ -118,7 +125,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const count = items.reduce((sum, i) => sum + i.quantity, 0);
 
   return (
-    <CartContext.Provider value={{ items, loading, count, refresh, add, updateQuantity, remove, clear }}>
+    <CartContext.Provider value={{ items, loading, count, refresh, add, buyNow, updateQuantity, remove, clear }}>
       {children}
     </CartContext.Provider>
   );

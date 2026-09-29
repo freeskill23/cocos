@@ -23,7 +23,9 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
   const [quantity, setQuantity] = useState(1);
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState(false);
-  const { add } = useCart();
+  const [buyingNow, setBuyingNow] = useState(false);
+  const [cartError, setCartError] = useState<string | null>(null);
+  const { add, buyNow } = useCart();
 
   useEffect(() => {
     (async () => {
@@ -74,12 +76,17 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
   const breakdown = product
     ? calculatePrice({ product, dimensions, pricing }, sizes)
     : null;
-  const unitPrice = (breakdown?.total ?? product?.base_price ?? 0) + optionsTotal;
+  const unitPrice = (breakdown?.basePrice ?? product?.base_price ?? 0)
+    + (breakdown?.widthAdjust ?? 0)
+    + (breakdown?.depthAdjust ?? 0)
+    + (breakdown?.heightAdjust ?? 0)
+    + optionsTotal;
 
   const handleAddToCart = async () => {
     if (!product) return;
     setAdding(true);
     setAdded(false);
+    setCartError(null);
     try {
       await add({
         product_id: product.id,
@@ -93,8 +100,33 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
       });
       setAdded(true);
       setTimeout(() => setAdded(false), 3000);
+    } catch (err) {
+      setCartError(err instanceof Error ? err.message : "장바구니 추가에 실패했습니다.");
     } finally {
       setAdding(false);
+    }
+  };
+
+  const handleBuyNow = async () => {
+    if (!product) return;
+    setBuyingNow(true);
+    setCartError(null);
+    try {
+      await buyNow({
+        product_id: product.id,
+        product_name: product.name,
+        width: dimensions.width,
+        depth: dimensions.depth,
+        height: dimensions.height,
+        selected_options: selectedOptions,
+        unit_price: unitPrice,
+        quantity,
+      });
+      onNavigate("/checkout");
+    } catch (err) {
+      setCartError(err instanceof Error ? err.message : "바로 구매에 실패했습니다.");
+    } finally {
+      setBuyingNow(false);
     }
   };
 
@@ -198,6 +230,11 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
                           </div>
                         ))}
                       </div>
+                      {optionsTotal > 0 && (
+                        <div className="mt-3 border-t border-birch-100 pt-3 text-xs text-charcoal-muted">
+                          옵션 추가 금액: +{formatWon(optionsTotal)}
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -213,14 +250,17 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
                     </div>
                     <div className="flex-1 text-right">
                       <p className="text-xs text-charcoal-muted">총 금액</p>
-                      <p className="text-xl font-bold text-charcoal">{formatWon(unitPrice * quantity)}</p>
+                      <p className="text-xl font-bold text-charcoal">{formatWon((unitPrice * quantity) + (breakdown?.packagingFee ?? 0) + (breakdown?.shippingFee ?? 0))}</p>
                     </div>
                   </div>
 
                   <div className="mt-auto pt-6 space-y-3">
+                    {cartError && (
+                      <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{cartError}</div>
+                    )}
                     <button
                       onClick={handleAddToCart}
-                      disabled={adding}
+                      disabled={adding || buyingNow}
                       className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-charcoal bg-white py-3.5 text-sm font-medium text-charcoal transition-all hover:bg-birch-50 active:scale-[0.98] disabled:opacity-50"
                     >
                       {added ? (
@@ -238,11 +278,24 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
                       )}
                     </button>
                     <button
+                      onClick={handleBuyNow}
+                      disabled={buyingNow || adding}
+                      className="group flex w-full items-center justify-center gap-2 rounded-full bg-charcoal py-3.5 text-sm font-medium text-ivory transition-all hover:bg-charcoal-light active:scale-[0.98] disabled:opacity-50"
+                    >
+                      {buyingNow ? (
+                        <Loader2 size={18} className="animate-spin" />
+                      ) : (
+                        <>
+                          바로 구매하기
+                          <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />
+                        </>
+                      )}
+                    </button>
+                    <button
                       onClick={() => onNavigate("/cart")}
-                      className="group flex w-full items-center justify-center gap-2 rounded-full bg-charcoal py-3.5 text-sm font-medium text-ivory transition-all hover:bg-charcoal-light active:scale-[0.98]"
+                      className="text-center text-xs font-medium text-charcoal-muted transition-colors hover:text-charcoal"
                     >
                       장바구니 보기
-                      <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />
                     </button>
                   </div>
                 </div>
