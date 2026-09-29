@@ -200,19 +200,18 @@ function ImageBlockEditor({ value, onChange }: { value: string; onChange: (url: 
       setError("이미지 파일만 업로드할 수 있습니다.");
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      setError("10MB 이하 파일만 업로드할 수 있습니다.");
+    if (file.size > 50 * 1024 * 1024) {
+      setError("50MB 이하 파일만 업로드할 수 있습니다.");
       return;
     }
     setError(null);
     setUploading(true);
     try {
-      const resized = await resizeImage(file, 1400, 1400);
-      const ext = resized.type === "image/jpeg" ? "jpg" : "webp";
+      const ext = file.name.split('.').pop()?.toLowerCase() || "jpg";
       const fileName = `detail/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from("product-images")
-        .upload(fileName, resized, { contentType: resized.type });
+        .upload(fileName, file, { contentType: file.type });
       if (uploadError) throw uploadError;
       const { data } = supabase.storage.from("product-images").getPublicUrl(fileName);
       onChange(data.publicUrl);
@@ -247,7 +246,7 @@ function ImageBlockEditor({ value, onChange }: { value: string; onChange: (url: 
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm">
                 <ImageIcon size={18} className="text-birch-400" />
               </div>
-              <span className="text-xs font-medium text-charcoal-muted">이미지 업로드 (최대 10MB)</span>
+              <span className="text-xs font-medium text-charcoal-muted">이미지 업로드 (최대 50MB, 원본 그대로 저장)</span>
             </>
           )}
           <input
@@ -267,36 +266,7 @@ function ImageBlockEditor({ value, onChange }: { value: string; onChange: (url: 
   );
 }
 
-async function resizeImage(file: File, maxWidth: number, maxHeight: number): Promise<Blob> {
-  const img = await loadImage(file);
-  const ratio = Math.min(maxWidth / img.width, maxHeight / img.height, 1);
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(img.width * ratio);
-  canvas.height = Math.round(img.height * ratio);
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return file;
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  const blob = await new Promise<Blob>((resolve) => {
-    canvas.toBlob((b) => resolve(b ?? file), "image/webp", 0.85);
-  });
-  return blob;
-}
 
-function loadImage(file: File): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve(img);
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("이미지를 불러오지 못했습니다."));
-    };
-    img.src = url;
-  });
-}
 
 function genId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

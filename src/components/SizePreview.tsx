@@ -37,8 +37,8 @@ export function SizePreview({
   const groundY = svgH - 30;
 
   return (
-    <div className="flex flex-col items-center">
-      <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} className="overflow-visible">
+    <div className="flex w-full flex-col items-center overflow-hidden">
+      <svg width="100%" height="auto" viewBox={`0 0 ${svgW} ${svgH}`} className="max-w-[280px]" preserveAspectRatio="xMidYMid meet">
         <line x1="20" y1={groundY} x2={svgW - 20} y2={groundY} stroke="#E0D0BA" strokeWidth="1.5" />
 
         {/* Back face */}

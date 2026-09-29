@@ -1,10 +1,16 @@
 import { useEffect, useState, useCallback } from "react";
-import { Plus, Trash2, Edit3, X, Loader2, Eye, EyeOff, Save, Package } from "lucide-react";
+import { Plus, Trash2, Edit3, X, Loader2, Eye, EyeOff, Save, Package, GripVertical } from "lucide-react";
 import { fetchAllProducts, upsertProduct, deleteProduct } from "@/lib/api";
-import type { ProductRow } from "@/types/database";
+import type { ProductRow, ProductOption, ProductOptionValue } from "@/types/database";
 import { formatWon } from "@/lib/pricing";
 import { ImageUpload } from "@/components/admin/ImageUpload";
 import { DetailEditor } from "@/components/admin/DetailEditor";
+
+let optionIdCounter = 0;
+function genId(prefix: string): string {
+  optionIdCounter += 1;
+  return `${prefix}_${Date.now().toString(36)}_${optionIdCounter}`;
+}
 
 export function ProductsTab() {
   const [items, setItems] = useState<ProductRow[]>([]);
@@ -151,6 +157,13 @@ function ProductEditor({
   const [basePrice, setBasePrice] = useState(item?.base_price ?? 50000);
   const [order, setOrder] = useState(item?.display_order ?? 0);
   const [active, setActive] = useState(item?.is_active ?? true);
+  const [options, setOptions] = useState<ProductOption[]>(
+    (item?.options ?? []).map((o) => ({
+      ...o,
+      id: o.id || genId("opt"),
+      values: (o.values ?? []).map((v) => ({ ...v, id: v.id || genId("val") })),
+    }))
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -174,6 +187,7 @@ function ProductEditor({
         base_price: basePrice,
         display_order: order,
         is_active: active,
+        options,
       });
       onSaved();
     } catch (err) {
@@ -243,6 +257,8 @@ function ProductEditor({
             </FormField>
           </div>
 
+          <OptionsEditor options={options} setOptions={setOptions} />
+
           {error && <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
           <div className="flex gap-3 pt-2">
@@ -254,6 +270,140 @@ function ProductEditor({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function OptionsEditor({
+  options,
+  setOptions,
+}: {
+  options: ProductOption[];
+  setOptions: React.Dispatch<React.SetStateAction<ProductOption[]>>;
+}) {
+  const addOption = () => {
+    setOptions((prev) => [
+      ...prev,
+      { id: genId("opt"), name: "", values: [{ id: genId("val"), label: "", price: 0 }] },
+    ]);
+  };
+
+  const removeOption = (optId: string) => {
+    setOptions((prev) => prev.filter((o) => o.id !== optId));
+  };
+
+  const updateOptionName = (optId: string, name: string) => {
+    setOptions((prev) => prev.map((o) => (o.id === optId ? { ...o, name } : o)));
+  };
+
+  const addValue = (optId: string) => {
+    setOptions((prev) =>
+      prev.map((o) =>
+        o.id === optId ? { ...o, values: [...o.values, { id: genId("val"), label: "", price: 0 }] } : o
+      )
+    );
+  };
+
+  const removeValue = (optId: string, valId: string) => {
+    setOptions((prev) =>
+      prev.map((o) =>
+        o.id === optId ? { ...o, values: o.values.filter((v) => v.id !== valId) } : o
+      )
+    );
+  };
+
+  const updateValue = (optId: string, valId: string, field: keyof ProductOptionValue, value: string | number) => {
+    setOptions((prev) =>
+      prev.map((o) =>
+        o.id === optId
+          ? { ...o, values: o.values.map((v) => (v.id === valId ? { ...v, [field]: value } : v)) }
+          : o
+      )
+    );
+  };
+
+  return (
+    <div className="rounded-2xl bg-birch-50 p-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-charcoal">추가 옵션</p>
+        <button
+          type="button"
+          onClick={addOption}
+          className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-xs font-medium text-charcoal transition-colors hover:bg-birch-100"
+        >
+          <Plus size={13} />
+          옵션 추가
+        </button>
+      </div>
+
+      {options.length === 0 ? (
+        <p className="mt-3 text-xs text-charcoal-muted">
+          옵션이 없습니다. 예: 바닥재(기본 합판 / 소프트 쿠션 +15,000원) 등
+        </p>
+      ) : (
+        <div className="mt-4 space-y-4">
+          {options.map((opt) => (
+            <div key={opt.id} className="rounded-xl border border-birch-200 bg-white p-4">
+              <div className="flex items-center gap-2">
+                <GripVertical size={14} className="shrink-0 text-birch-300" />
+                <input
+                  type="text"
+                  value={opt.name}
+                  onChange={(e) => updateOptionName(opt.id, e.target.value)}
+                  placeholder="옵션명 (예: 바닥재)"
+                  className="flex-1 rounded-lg border border-birch-200 bg-white px-3 py-2 text-sm font-medium text-charcoal focus:border-birch-400 focus:outline-none focus:ring-2 focus:ring-birch-200"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeOption(opt.id)}
+                  className="shrink-0 rounded-lg p-1.5 text-red-500 transition-colors hover:bg-red-50"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+
+              <div className="mt-3 space-y-2 pl-6">
+                {opt.values.map((val) => (
+                  <div key={val.id} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={val.label}
+                      onChange={(e) => updateValue(opt.id, val.id, "label", e.target.value)}
+                      placeholder="옵션값 (예: 소프트 쿠션)"
+                      className="flex-1 rounded-lg border border-birch-200 bg-white px-3 py-2 text-sm text-charcoal focus:border-birch-400 focus:outline-none focus:ring-2 focus:ring-birch-200"
+                    />
+                    <div className="flex items-center gap-1 shrink-0">
+                      <input
+                        type="number"
+                        value={val.price}
+                        onChange={(e) => updateValue(opt.id, val.id, "price", Number(e.target.value) || 0)}
+                        placeholder="0"
+                        className="w-24 rounded-lg border border-birch-200 bg-white px-3 py-2 text-right text-sm text-charcoal focus:border-birch-400 focus:outline-none focus:ring-2 focus:ring-birch-200"
+                      />
+                      <span className="text-xs text-charcoal-muted">원</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeValue(opt.id, val.id)}
+                      className="shrink-0 rounded-lg p-1 text-charcoal-muted transition-colors hover:bg-birch-100 hover:text-red-500"
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => addValue(opt.id)}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-charcoal-muted transition-colors hover:text-charcoal"
+                >
+                  <Plus size={13} />
+                  옵션값 추가
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

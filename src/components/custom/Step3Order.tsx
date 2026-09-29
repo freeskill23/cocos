@@ -1,11 +1,11 @@
-import { useState } from "react";
-import { Check, PartyPopper, ArrowRight, Loader2, AlertCircle } from "lucide-react";
+import { useState, useRef, useMemo } from "react";
+import { Check, PartyPopper, ArrowRight, Loader2, AlertCircle, Search } from "lucide-react";
 import { StepHeader, Field } from "@/components/custom/Step1Product";
 import { calculatePrice, formatWon } from "@/lib/pricing";
 import { insertOrder } from "@/lib/api";
 import { BRAND } from "@/config/brand";
 import type { PricingSettings, SizeSettings } from "@/config/pricing";
-import type { ProductRow } from "@/types/database";
+import type { ProductRow, ProductOption, SelectedOption } from "@/types/database";
 
 interface Step3Props {
   product: ProductRow;
@@ -21,9 +21,33 @@ interface CustomerInfo {
   name: string;
   phone: string;
   email: string;
+  postcode: string;
   address: string;
   detailAddress: string;
   memo: string;
+}
+
+interface DaumPostcodeData {
+  zonecode: string;
+  roadAddress: string;
+  jibunAddress: string;
+  userSelectedType: string;
+  bname: string;
+  buildingName: string;
+  apartment: string;
+}
+
+declare global {
+  interface Window {
+    daum?: {
+      Postcode: new (options: {
+        oncomplete: (data: DaumPostcodeData) => void;
+        onclose?: (state: string) => void;
+        width?: number | string;
+        height?: number;
+      }) => { open: () => void };
+    };
+  }
 }
 
 export function Step3Order({
@@ -39,21 +63,105 @@ export function Step3Order({
     name: "",
     phone: "",
     email: "",
+    postcode: "",
     address: "",
     detailAddress: "",
     memo: "",
   });
+  const [selectedOptionValueIds, setSelectedOptionValueIds] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [postcodeLoading, setPostcodeLoading] = useState(false);
+  const postcodeRef = useRef<HTMLDivElement>(null);
 
   const breakdown = calculatePrice({ product, dimensions, pricing }, sizes);
+
+  const selectedOptions: SelectedOption[] = useMemo(() => {
+    return (product.options ?? [])
+      .filter((opt) => selectedOptionValueIds[opt.id])
+      .map((opt) => {
+        const val = opt.values.find((v) => v.id === selectedOptionValueIds[opt.id]);
+        return {
+          optionName: opt.name,
+          valueLabel: val?.label ?? "",
+          price: val?.price ?? 0,
+        };
+      })
+      .filter((s) => s.valueLabel);
+  }, [product.options, selectedOptionValueIds]);
+
+  const optionsTotal = useMemo(
+    () => selectedOptions.reduce((sum, s) => sum + s.price, 0),
+    [selectedOptions]
+  );
+
+  const grandTotal = breakdown.total + optionsTotal;
 
   const update = (key: keyof CustomerInfo, value: string) => {
     setCustomer((prev) => ({ ...prev, [key]: value }));
   };
 
+  const handleOptionSelect = (optId: string, valId: string) => {
+    setSelectedOptionValueIds((prev) => ({ ...prev, [optId]: valId }));
+  };
+
   const isValid = customer.name.trim() && customer.phone.trim() && customer.address.trim();
+
+  const handlePostcodeSearch = () => {
+    if (!window.daum?.Postcode) {
+      setPostcodeLoading(true);
+      const script = document.createElement("script");
+      script.src = "https://t1.daumcdn.net/mapjsapi/bind/postcode/prod/postcode.v2.js";
+      script.onload = () => {
+        setPostcodeLoading(false);
+        openPostcodePopup();
+      };
+      script.onerror = () => {
+        setPostcodeLoading(false);
+        setSubmitError("주소 검색 서비스를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
+      };
+      document.body.appendChild(script);
+    } else {
+      openPostcodePopup();
+    }
+  };
+
+  const openPostcodePopup = () => {
+    if (!window.daum?.Postcode) return;
+    const postcode = new window.daum.Postcode({
+      width: 500,
+      height: 500,
+      oncomplete: (data: DaumPostcodeData) => {
+        const roadAddr = data.roadAddress;
+        const extraAddr = buildExtraAddress(data);
+        setCustomer((prev) => ({
+          ...prev,
+          postcode: data.zonecode,
+          address: roadAddr + extraAddr,
+          detailAddress: "",
+        }));
+        setTimeout(() => {
+          const el = document.getElementById("detail-address-input");
+          if (el) el.focus();
+        }, 100);
+      },
+    });
+    postcode.open();
+  };
+
+  const buildExtraAddress = (data: DaumPostcodeData): string => {
+    if (data.userSelectedType !== "R") return "";
+    let extraAddr = "";
+    if (data.bname && /[동|로|가]$/g.test(data.bname)) {
+      extraAddr += ` (${data.bname}`;
+    }
+    if (data.buildingName && data.apartment === "Y") {
+      extraAddr += extraAddr ? `, ${data.buildingName}` : ` (${data.buildingName}`;
+    }
+    if (extraAddr) extraAddr += ")";
+    return extraAddr;
+  };
 
   const handleSubmit = async () => {
     if (!isValid || submitting) return;
@@ -66,12 +174,14 @@ export function Step3Order({
         width: dimensions.width,
         depth: dimensions.depth,
         height: dimensions.height,
-        total_price: breakdown.total,
+        total_price: grandTotal,
         customer_name: customer.name.trim(),
         customer_phone: customer.phone.trim(),
         customer_email: customer.email.trim() || null,
+        customer_postcode: customer.postcode.trim() || null,
         customer_address: customer.address.trim(),
         customer_detail_address: customer.detailAddress.trim() || null,
+        selected_options: selectedOptions,
         memo: customer.memo.trim() || null,
       });
       setSubmitted(true);
@@ -101,7 +211,10 @@ export function Step3Order({
           <div className="mt-4 space-y-2 text-sm">
             <SummaryRow label="상품" value={product.name} />
             <SummaryRow label="사이즈" value={`${dimensions.width} × ${dimensions.depth} × ${dimensions.height}mm`} />
-            <SummaryRow label="총 견적" value={formatWon(breakdown.total)} />
+            {selectedOptions.map((s, i) => (
+              <SummaryRow key={i} label={s.optionName} value={s.price > 0 ? `${s.valueLabel} (+${formatWon(s.price)})` : s.valueLabel} />
+            ))}
+            <SummaryRow label="총 견적" value={formatWon(grandTotal)} />
           </div>
         </div>
 
@@ -115,10 +228,26 @@ export function Step3Order({
 
   return (
     <div>
-      <StepHeader title="주문" desc="배송받으실 정보를 입력하고 주문을 신청하세요." />
+      <StepHeader title="주문" desc="옵션을 선택하고 배송받으실 정보를 입력하세요." />
 
       <div className="mt-8 grid gap-6 lg:grid-cols-5">
         <div className="lg:col-span-3 space-y-5">
+          {(product.options ?? []).length > 0 && (
+            <div className="rounded-2xl border border-birch-200 bg-birch-50 p-5">
+              <h3 className="text-sm font-semibold text-charcoal">추가 옵션 선택</h3>
+              <div className="mt-4 space-y-4">
+                {(product.options ?? []).map((opt) => (
+                  <OptionSelector
+                    key={opt.id}
+                    option={opt}
+                    selectedValueId={selectedOptionValueIds[opt.id] ?? ""}
+                    onSelect={(valId) => handleOptionSelect(opt.id, valId)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
           <Field label="주문자 이름">
             <input
               type="text"
@@ -146,24 +275,50 @@ export function Step3Order({
               className="input-field"
             />
           </Field>
+
           <Field label="배송 주소">
+            <div ref={postcodeRef} className="flex flex-col gap-2 sm:flex-row sm:items-start">
+              <input
+                type="text"
+                value={customer.postcode}
+                readOnly
+                placeholder="우편번호"
+                className="input-field w-full sm:w-32 shrink-0 cursor-default bg-birch-50"
+              />
+              <button
+                type="button"
+                onClick={handlePostcodeSearch}
+                disabled={postcodeLoading}
+                className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl border border-birch-300 bg-white px-4 py-3 text-sm font-medium text-charcoal transition-colors hover:bg-birch-50 disabled:opacity-50 sm:py-[14px]"
+              >
+                {postcodeLoading ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Search size={16} />
+                )}
+                주소 검색
+              </button>
+            </div>
             <input
               type="text"
               value={customer.address}
-              onChange={(e) => update("address", e.target.value)}
-              placeholder="주소를 입력해주세요."
-              className="input-field"
+              readOnly
+              placeholder="도로명 주소를 검색해주세요."
+              className="input-field mt-2 cursor-default bg-birch-50"
             />
           </Field>
-          <Field label="상세 주소" optional>
+
+          <Field label="상세 주소">
             <input
+              id="detail-address-input"
               type="text"
               value={customer.detailAddress}
               onChange={(e) => update("detailAddress", e.target.value)}
-              placeholder="상세 주소를 입력해주세요."
+              placeholder="동, 호수 등 상세 주소를 입력해주세요."
               className="input-field"
             />
           </Field>
+
           <Field label="메모" optional>
             <textarea
               value={customer.memo}
@@ -189,11 +344,14 @@ export function Step3Order({
               {breakdown.heightAdjust > 0 && <SummaryRow label="높이 추가" value={`+${formatWon(breakdown.heightAdjust)}`} />}
               <SummaryRow label="포장비" value={formatWon(breakdown.packagingFee)} />
               <SummaryRow label="배송비" value={breakdown.shippingFee === 0 ? "무료" : formatWon(breakdown.shippingFee)} />
+              {selectedOptions.map((s, i) => (
+                <SummaryRow key={i} label={s.optionName} value={s.price > 0 ? `+${formatWon(s.price)}` : s.valueLabel} />
+              ))}
             </div>
             <div className="mt-4 border-t border-birch-200 pt-4">
               <div className="flex items-end justify-between">
                 <span className="text-sm text-charcoal-muted">총 견적</span>
-                <span className="font-serif text-2xl font-bold text-charcoal">{formatWon(breakdown.total)}</span>
+                <span className="font-serif text-2xl font-bold text-charcoal">{formatWon(grandTotal)}</span>
               </div>
             </div>
           </div>
@@ -238,6 +396,46 @@ export function Step3Order({
       <p className="mt-6 text-center text-xs text-charcoal-muted">
         {BRAND.nameKr}는 주문제작 상품으로, 제작 시작 후에는 취소가 어려울 수 있습니다.
       </p>
+    </div>
+  );
+}
+
+function OptionSelector({
+  option,
+  selectedValueId,
+  onSelect,
+}: {
+  option: ProductOption;
+  selectedValueId: string;
+  onSelect: (valId: string) => void;
+}) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-charcoal">{option.name}</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {option.values.map((val) => {
+          const isSelected = selectedValueId === val.id;
+          return (
+            <button
+              key={val.id}
+              type="button"
+              onClick={() => onSelect(val.id)}
+              className={`inline-flex items-center gap-1.5 rounded-xl border-2 px-3.5 py-2 text-sm transition-all ${
+                isSelected
+                  ? "border-charcoal bg-charcoal text-ivory"
+                  : "border-birch-200 bg-white text-charcoal hover:border-birch-400"
+              }`}
+            >
+              <span className="font-medium">{val.label}</span>
+              {val.price > 0 && (
+                <span className={`text-xs ${isSelected ? "text-ivory/70" : "text-charcoal-muted"}`}>
+                  +{formatWon(val.price)}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

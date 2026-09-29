@@ -177,6 +177,9 @@ function OrderCard({
               <div className="mt-2 space-y-1.5 text-sm">
                 <DetailRow label="상품" value={order.product_name || "-"} />
                 <DetailRow label="사이즈" value={`${order.width} × ${order.depth} × ${order.height}mm`} />
+                {(order.selected_options ?? []).map((s, i) => (
+                  <DetailRow key={i} label={s.optionName} value={s.price > 0 ? `${s.valueLabel} (+${formatWon(s.price)})` : s.valueLabel} />
+                ))}
                 {order.memo && <DetailRow label="메모" value={order.memo} />}
               </div>
             </div>
@@ -187,7 +190,7 @@ function OrderCard({
                 <DetailRow label="이름" value={order.customer_name} />
                 <DetailRow label="연락처" value={order.customer_phone} />
                 <DetailRow label="이메일" value={order.customer_email || "-"} />
-                <DetailRow label="주소" value={`${order.customer_address} ${order.customer_detail_address || ""}`} />
+                <DetailRow label="주소" value={`${order.customer_postcode ?? ""} ${order.customer_address} ${order.customer_detail_address || ""}`.trim()} />
               </div>
 
               <h4 className="mt-4 text-xs font-semibold text-charcoal-muted">결제</h4>

@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import type { OrderRow, PortfolioRow, ReviewRow, SettingsMap, ProductRow } from "@/types/database";
+import type { OrderRow, PortfolioRow, ReviewRow, SettingsMap, ProductRow, SelectedOption } from "@/types/database";
 
 export async function fetchActiveProducts(): Promise<ProductRow[]> {
   const { data, error } = await supabase
@@ -117,8 +117,10 @@ export interface OrderInsert {
   customer_name: string;
   customer_phone: string;
   customer_email: string | null;
+  customer_postcode: string | null;
   customer_address: string;
   customer_detail_address: string | null;
+  selected_options: SelectedOption[];
   memo: string | null;
 }
 

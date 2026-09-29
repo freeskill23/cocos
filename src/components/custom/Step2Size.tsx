@@ -105,7 +105,7 @@ function SizeInput({
 
   return (
     <Field label={`${label}`}>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
         <input
           type="number"
           value={value}
@@ -116,9 +116,9 @@ function SizeInput({
             const v = Number(e.target.value);
             if (!isNaN(v)) onChange(Math.max(min, Math.min(max, v)));
           }}
-          className="w-28 rounded-xl border border-birch-200 bg-white px-4 py-3 text-right text-lg font-semibold text-charcoal focus:border-birch-400 focus:outline-none focus:ring-2 focus:ring-birch-200"
+          className="w-20 shrink-0 rounded-xl border border-birch-200 bg-white px-3 py-3 text-right text-base font-semibold text-charcoal focus:border-birch-400 focus:outline-none focus:ring-2 focus:ring-birch-200 sm:w-28 sm:text-lg"
         />
-        <span className="text-sm text-charcoal-muted">mm</span>
+        <span className="shrink-0 text-sm text-charcoal-muted">mm</span>
         {adjust > 0 && (
           <span className="ml-auto text-xs font-medium text-birch-500">
             +{formatWon(adjust)}

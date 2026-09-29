@@ -1,3 +1,21 @@
+export interface ProductOptionValue {
+  id: string;
+  label: string;
+  price: number;
+}
+
+export interface ProductOption {
+  id: string;
+  name: string;
+  values: ProductOptionValue[];
+}
+
+export interface SelectedOption {
+  optionName: string;
+  valueLabel: string;
+  price: number;
+}
+
 export interface ProductRow {
   id: string;
   name: string;
@@ -8,6 +26,7 @@ export interface ProductRow {
   base_height: number;
   base_price: number;
   detail_content: string;
+  options: ProductOption[];
   is_active: boolean;
   display_order: number;
   created_at: string;
@@ -25,8 +44,10 @@ export interface OrderRow {
   customer_name: string;
   customer_phone: string;
   customer_email: string | null;
+  customer_postcode: string | null;
   customer_address: string;
   customer_detail_address: string | null;
+  selected_options: SelectedOption[] | null;
   memo: string | null;
   status: string;
   created_at: string;
