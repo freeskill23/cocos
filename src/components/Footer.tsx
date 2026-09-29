@@ -64,16 +64,27 @@ export function Footer({ onNavigate }: FooterProps) {
           </div>
         </div>
 
-        <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-birch-200 pt-8 sm:flex-row">
-          <p className="text-xs text-charcoal-muted">
-            © {new Date().getFullYear()} {BRAND.nameEn}. All rights reserved.
-          </p>
-          <button
-            onClick={() => onNavigate("/admin")}
-            className="text-xs text-charcoal-muted/60 transition-colors hover:text-charcoal-muted"
-          >
-            관리자
-          </button>
+        <div className="mt-12 flex flex-col gap-6 border-t border-birch-200 pt-8">
+          <div className="flex flex-wrap gap-x-6 gap-y-2">
+            <button onClick={() => onNavigate("/business")} className="text-xs text-charcoal-muted transition-colors hover:text-charcoal">사업자 정보</button>
+            <button onClick={() => onNavigate("/privacy")} className="text-xs text-charcoal-muted transition-colors hover:text-charcoal">개인정보처리방침</button>
+            <button onClick={() => onNavigate("/refund")} className="text-xs text-charcoal-muted transition-colors hover:text-charcoal">환불 정책</button>
+            <button
+              onClick={() => onNavigate("/admin")}
+              className="text-xs text-charcoal-muted/60 transition-colors hover:text-charcoal-muted"
+            >
+              관리자
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-2 text-xs text-charcoal-muted sm:flex-row sm:items-center sm:justify-between">
+            <p>
+              © {new Date().getFullYear()} {BRAND.nameEn}. All rights reserved.
+            </p>
+            <p>
+              {BRAND.nameKr} · 대표자: {BRAND.ceoName} · 사업자등록번호: {BRAND.businessNumber}
+            </p>
+          </div>
         </div>
       </div>
     </footer>

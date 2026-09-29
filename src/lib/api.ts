@@ -247,6 +247,8 @@ export interface OrderInsert {
   customer_detail_address: string | null;
   selected_options: SelectedOption[];
   memo: string | null;
+  payment_method?: string | null;
+  portone_merchant_id?: string | null;
 }
 
 export async function insertOrder(order: OrderInsert): Promise<void> {
@@ -296,6 +298,31 @@ export async function confirmPaymentByToken(token: string): Promise<void> {
     .update({ status: "in_production", updated_at: new Date().toISOString() })
     .eq("payment_token", token);
   if (error) throw error;
+}
+
+export async function confirmCardPayment(
+  orderId: string,
+  portonePaymentId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("orders")
+    .update({
+      status: "in_production",
+      portone_payment_id: portonePaymentId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", orderId);
+  if (error) throw error;
+}
+
+export async function fetchOrderById(id: string): Promise<OrderRow | null> {
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
 }
 
 export async function deleteOrder(id: string): Promise<void> {

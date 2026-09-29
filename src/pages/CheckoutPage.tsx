@@ -1,15 +1,18 @@
 import { useState, useEffect } from "react";
-import { Loader2, Check, ArrowRight, User, Mail, Lock, Copy, Building2, Info } from "lucide-react";
+import { Loader2, Check, ArrowRight, User, Mail, Lock, Copy, Building2, Info, CreditCard } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 import { useAuth } from "@/hooks/useAuth";
 import { insertOrder, fetchSettings, type OrderInsert } from "@/lib/api";
 import { formatWon } from "@/lib/pricing";
 import { BRAND } from "@/config/brand";
-import type { BankAccount } from "@/types/database";
+import { requestCardPayment } from "@/lib/portone";
+import type { BankAccount, PortOneConfig } from "@/types/database";
 
 interface CheckoutPageProps {
   onNavigate: (to: string) => void;
 }
+
+type PaymentMethod = "bank_transfer" | "card";
 
 export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
   const { items, clear } = useCart();
@@ -28,15 +31,18 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
     detailAddress: "",
     memo: "",
   });
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("card");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+  const [portoneConfig, setPortoneConfig] = useState<PortOneConfig | null>(null);
 
   useEffect(() => {
     fetchSettings().then((settings) => {
       if (settings.bank_accounts) setBankAccounts(settings.bank_accounts);
+      if (settings.portone) setPortoneConfig(settings.portone);
     });
   }, []);
 
@@ -62,28 +68,85 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      for (const item of items) {
-        const order: OrderInsert = {
-          product_id: item.product_id,
-          product_name: item.product_name,
-          width: item.width,
-          depth: item.depth,
-          height: item.height,
-          total_price: item.unit_price * item.quantity,
-          customer_name: customer.name.trim(),
-          customer_phone: customer.phone.trim(),
-          customer_email: session?.user?.email ?? null,
-          customer_postcode: customer.postcode.trim() || null,
-          customer_address: customer.address.trim(),
-          customer_detail_address: customer.detailAddress.trim() || null,
-          selected_options: item.selected_options ?? [],
-          memo: customer.memo.trim() || null,
-        };
-        await insertOrder(order);
+      if (paymentMethod === "card") {
+        if (!portoneConfig?.storeId || !portoneConfig?.channelKey) {
+          setSubmitError("카드 결제 설정이 완료되지 않았습니다. 관리자에게 문의해주세요.");
+          setSubmitting(false);
+          return;
+        }
+
+        const merchantIds: string[] = [];
+        for (const item of items) {
+          const merchantId = `order_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+          merchantIds.push(merchantId);
+          const order: OrderInsert = {
+            product_id: item.product_id,
+            product_name: item.product_name,
+            width: item.width,
+            depth: item.depth,
+            height: item.height,
+            total_price: item.unit_price * item.quantity,
+            customer_name: customer.name.trim(),
+            customer_phone: customer.phone.trim(),
+            customer_email: session?.user?.email ?? null,
+            customer_postcode: customer.postcode.trim() || null,
+            customer_address: customer.address.trim(),
+            customer_detail_address: customer.detailAddress.trim() || null,
+            selected_options: item.selected_options ?? [],
+            memo: customer.memo.trim() || null,
+            payment_method: "card",
+            portone_merchant_id: merchantId,
+          };
+          await insertOrder(order);
+        }
+
+        const orderNames = items.map((i) => `${i.product_name} × ${i.quantity}`).join(", ");
+        const firstMerchantId = merchantIds[0];
+        const redirectUrl = `${window.location.origin}/pay/card/${firstMerchantId}`;
+
+        const result = await requestCardPayment({
+          storeId: portoneConfig.storeId,
+          channelKey: portoneConfig.channelKey,
+          paymentId: firstMerchantId,
+          orderName: orderNames.length > 50 ? orderNames.slice(0, 50) + "..." : orderNames,
+          totalAmount: total,
+          customerName: customer.name.trim(),
+          customerPhone: customer.phone.trim(),
+          customerEmail: session?.user?.email ?? undefined,
+          redirectUrl,
+        });
+
+        if (result.status === "PAID") {
+          await clear();
+          onNavigate(`/pay/card/${firstMerchantId}`);
+        } else if (result.status === "FAILED") {
+          setSubmitError("결제가 실패했습니다. 다시 시도해주세요.");
+        }
+      } else {
+        for (const item of items) {
+          const order: OrderInsert = {
+            product_id: item.product_id,
+            product_name: item.product_name,
+            width: item.width,
+            depth: item.depth,
+            height: item.height,
+            total_price: item.unit_price * item.quantity,
+            customer_name: customer.name.trim(),
+            customer_phone: customer.phone.trim(),
+            customer_email: session?.user?.email ?? null,
+            customer_postcode: customer.postcode.trim() || null,
+            customer_address: customer.address.trim(),
+            customer_detail_address: customer.detailAddress.trim() || null,
+            selected_options: item.selected_options ?? [],
+            memo: customer.memo.trim() || null,
+            payment_method: "bank_transfer",
+          };
+          await insertOrder(order);
+        }
+        await clear();
+        setSubmitted(true);
+        window.scrollTo({ top: 0, behavior: "smooth" });
       }
-      await clear();
-      setSubmitted(true);
-      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "주문 접수 중 오류가 발생했습니다.");
     } finally {
@@ -185,6 +248,8 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
     );
   }
 
+  const cardAvailable = portoneConfig?.storeId && portoneConfig?.channelKey;
+
   return (
     <main className="min-h-screen bg-ivory pt-20 md:pt-24">
       <div className="mx-auto max-w-4xl px-5 py-10 sm:px-8 md:py-16 lg:px-12">
@@ -270,20 +335,50 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
 
         <div className="mt-6 rounded-3xl border border-birch-200 bg-white p-6 sm:p-8">
           <h3 className="text-sm font-semibold text-charcoal">결제 방법</h3>
-          <div className="mt-4 rounded-xl bg-birch-50 p-4">
-            <div className="flex items-center gap-3">
+          <div className="mt-4 space-y-3">
+            <button
+              onClick={() => setPaymentMethod("card")}
+              disabled={!cardAvailable}
+              className={`flex w-full items-center gap-3 rounded-xl border-2 p-4 text-left transition-all ${
+                paymentMethod === "card"
+                  ? "border-birch-400 bg-birch-50"
+                  : "border-birch-200 bg-white hover:border-birch-300"
+              } ${!cardAvailable ? "opacity-40 cursor-not-allowed" : ""}`}
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white">
+                <CreditCard size={20} className="text-birch-600" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-charcoal">카드 결제</p>
+                <p className="mt-0.5 text-xs text-charcoal-muted">
+                  {cardAvailable ? "신용/체크카드, 간편결제로 즉시 결제" : "현재 이용할 수 없습니다"}
+                </p>
+              </div>
+              <div className={`h-5 w-5 rounded-full border-2 ${paymentMethod === "card" ? "border-birch-500 bg-birch-500" : "border-birch-300"}`}>
+                {paymentMethod === "card" && <Check size={12} className="m-auto text-white" />}
+              </div>
+            </button>
+
+            <button
+              onClick={() => setPaymentMethod("bank_transfer")}
+              className={`flex w-full items-center gap-3 rounded-xl border-2 p-4 text-left transition-all ${
+                paymentMethod === "bank_transfer"
+                  ? "border-birch-400 bg-birch-50"
+                  : "border-birch-200 bg-white hover:border-birch-300"
+              }`}
+            >
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white">
                 <Building2 size={20} className="text-birch-600" />
               </div>
-              <div>
+              <div className="flex-1">
                 <p className="text-sm font-semibold text-charcoal">무통장입금</p>
                 <p className="mt-0.5 text-xs text-charcoal-muted">주문 접수 후 안내된 계좌로 입금해주시면 확인 후 제작을 시작합니다.</p>
               </div>
-            </div>
+              <div className={`h-5 w-5 rounded-full border-2 ${paymentMethod === "bank_transfer" ? "border-birch-500 bg-birch-500" : "border-birch-300"}`}>
+                {paymentMethod === "bank_transfer" && <Check size={12} className="m-auto text-white" />}
+              </div>
+            </button>
           </div>
-          <p className="mt-3 text-xs text-charcoal-muted">
-            추후 카드결제, 계좌이체 등 PG 결제가 추가될 예정입니다.
-          </p>
         </div>
 
         <div className="mt-6 rounded-3xl border border-birch-200 bg-white p-6">
@@ -305,15 +400,19 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
           {submitting ? (
             <>
               <Loader2 size={18} className="animate-spin" />
-              접수 중...
+              {paymentMethod === "card" ? "결제 진행 중..." : "접수 중..."}
             </>
           ) : (
             <>
-              주문 신청하기
+              {paymentMethod === "card" ? `${formatWon(total)} 결제하기` : "주문 신청하기"}
               <ArrowRight size={18} className="transition-transform group-hover:translate-x-0.5" />
             </>
           )}
         </button>
+
+        <p className="mt-6 text-center text-xs text-charcoal-muted">
+          {BRAND.nameKr}는 주문제작 상품으로, 제작 시작 후에는 취소가 어려울 수 있습니다.
+        </p>
       </div>
     </main>
   );

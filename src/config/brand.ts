@@ -9,6 +9,8 @@ export const BRAND = {
   subCopy: "원하는 가로 × 세로 × 높이로 만드는 자작나무 반려동물 가구",
   instagram: "@cocos_furniture",
   email: "hello@cocosfurniture.kr",
+  businessNumber: "132-18-80228",
+  ceoName: "김진수",
 } as const;
 
 export const NAV_LINKS = [

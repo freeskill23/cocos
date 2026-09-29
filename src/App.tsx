@@ -7,12 +7,14 @@ import { ShopPage } from "@/pages/ShopPage";
 import { CustomPage } from "@/pages/CustomPage";
 import { ProductDetailPage } from "@/pages/ProductDetailPage";
 import { PaymentPage } from "@/pages/PaymentPage";
+import { CardPaymentResult } from "@/pages/CardPaymentResult";
 import { AuthPage } from "@/pages/AuthPage";
 import { AccountPage } from "@/pages/AccountPage";
 import { CartPage } from "@/pages/CartPage";
 import { CheckoutPage } from "@/pages/CheckoutPage";
 import { AdminLogin } from "@/pages/AdminLogin";
 import { AdminDashboard } from "@/pages/AdminDashboard";
+import { BusinessInfoPage, PrivacyPage, RefundPolicyPage } from "@/pages/LegalPages";
 import { Loader2 } from "lucide-react";
 
 function AppRoutes() {
@@ -42,8 +44,11 @@ function AppRoutes() {
     return <AdminDashboard onNavigate={navigate} path={path} />;
   }
 
-  // /pay/:token → customer payment page
-  const paymentMatch = path.match(/^\/pay\/(.+)$/);
+  // /pay/card/:merchantId → card payment result page
+  const cardPaymentMatch = path.match(/^\/pay\/card\/(.+)$/);
+
+  // /pay/:token → bank transfer payment page (legacy token-based)
+  const paymentMatch = path.match(/^\/pay\/(?!card\/)(.+)$/);
 
   // /product/:id → product detail page
   const productMatch = path.match(/^\/product\/(.+)$/);
@@ -53,6 +58,16 @@ function AppRoutes() {
 
   // /custom/product/:id → legacy product detail (redirect to /product/:id)
   const legacyProductMatch = path.match(/^\/custom\/product\/(.+)$/);
+
+  if (cardPaymentMatch) {
+    return (
+      <div className="min-h-screen bg-ivory">
+        <Navbar onNavigate={navigate} currentPath={path} />
+        <CardPaymentResult merchantId={cardPaymentMatch[1]} onNavigate={navigate} />
+        <Footer onNavigate={navigate} />
+      </div>
+    );
+  }
 
   if (paymentMatch) {
     return (
@@ -81,6 +96,12 @@ function AppRoutes() {
         <ProductDetailPage productId={productId} onNavigate={navigate} />
       ) : path.startsWith("/custom") ? (
         <CustomPage onNavigate={navigate} />
+      ) : path === "/business" ? (
+        <BusinessInfoPage onNavigate={navigate} />
+      ) : path === "/privacy" ? (
+        <PrivacyPage onNavigate={navigate} />
+      ) : path === "/refund" ? (
+        <RefundPolicyPage onNavigate={navigate} />
       ) : categoryMatch ? (
         <ShopPage onNavigate={navigate} categoryId={categoryMatch[1]} />
       ) : (

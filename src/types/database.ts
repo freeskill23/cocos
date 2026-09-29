@@ -69,6 +69,9 @@ export interface OrderRow {
   memo: string | null;
   status: string;
   payment_token: string | null;
+  payment_method: string | null;
+  portone_payment_id: string | null;
+  portone_merchant_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -143,8 +146,14 @@ export interface BankAccount {
   accountNumber: string;
 }
 
+export interface PortOneConfig {
+  storeId: string;
+  channelKey: string;
+}
+
 export interface SettingsMap {
   pricing?: PricingSettings;
   sizes?: SizeSettings;
   bank_accounts?: BankAccount[];
+  portone?: PortOneConfig;
 }
