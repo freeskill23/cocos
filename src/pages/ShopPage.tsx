@@ -42,7 +42,7 @@ export function ShopPage({ onNavigate, categoryId }: ShopPageProps) {
         <div className="mb-10 text-center">
           <p className="text-xs font-semibold tracking-[0.25em] text-charcoal-muted">COCOS FURNITURE</p>
           <h1 className="mt-3 font-serif text-3xl text-charcoal sm:text-4xl">
-            {currentCategory ? currentCategory.name : "제품 둘러보기"}
+            {currentCategory ? currentCategory.name : "제품 전체보기"}
           </h1>
           <p className="mt-4 text-sm text-charcoal-muted">반려동물을 위한 자작나무 가구</p>
         </div>

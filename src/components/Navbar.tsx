@@ -41,7 +41,6 @@ export function Navbar({ onNavigate, currentPath }: NavbarProps) {
 
   const isCategoryActive = (catId: string) => currentPath === `/category/${catId}`;
   const isAllActive = currentPath === "/" || currentPath === "";
-  const isCustomActive = currentPath === "/custom";
 
   return (
     <>
@@ -87,15 +86,6 @@ export function Navbar({ onNavigate, currentPath }: NavbarProps) {
                   {cat.name}
                 </button>
               ))}
-              <span className="h-4 w-px bg-birch-200" />
-              <button
-                onClick={() => handleNavClick("/custom")}
-                className={`text-sm font-medium transition-colors hover:text-charcoal ${
-                  isCustomActive ? "text-charcoal" : "text-charcoal-light"
-                }`}
-              >
-                맞춤 제작
-              </button>
             </div>
 
             <div className="flex items-center gap-3">
@@ -120,7 +110,7 @@ export function Navbar({ onNavigate, currentPath }: NavbarProps) {
               </button>
               <button
                 onClick={() => setMenuOpen(!menuOpen)}
-                className="inline-flex h-10 w-10 items-center justify-center text-charcoal md:hidden"
+                className="inline-flex h-10 w-10 items-center justify-center text-charcoal"
                 aria-label="메뉴"
               >
                 {menuOpen ? <X size={22} /> : <Menu size={22} />}
@@ -131,7 +121,7 @@ export function Navbar({ onNavigate, currentPath }: NavbarProps) {
       </header>
 
       {menuOpen && (
-        <div className="fixed inset-0 top-16 z-40 bg-ivory md:hidden">
+        <div className="fixed inset-0 top-16 z-40 bg-ivory">
           <div className="flex flex-col gap-1 px-6 py-8">
             <button
               onClick={() => handleNavClick("/")}
@@ -149,12 +139,6 @@ export function Navbar({ onNavigate, currentPath }: NavbarProps) {
               </button>
             ))}
             <div className="my-2 h-px bg-birch-200" />
-            <button
-              onClick={() => handleNavClick("/custom")}
-              className="rounded-xl px-4 py-3.5 text-left text-base font-medium text-charcoal transition-colors hover:bg-birch-100"
-            >
-              맞춤 제작
-            </button>
             <button
               onClick={() => handleNavClick("/cart")}
               className="rounded-xl px-4 py-3.5 text-left text-base font-medium text-charcoal transition-colors hover:bg-birch-100"
