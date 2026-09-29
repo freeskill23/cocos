@@ -5,6 +5,7 @@ import { Footer } from "@/components/Footer";
 import { LandingPage } from "@/pages/LandingPage";
 import { CustomPage } from "@/pages/CustomPage";
 import { ProductDetailPage } from "@/pages/ProductDetailPage";
+import { PaymentPage } from "@/pages/PaymentPage";
 import { AdminLogin } from "@/pages/AdminLogin";
 import { AdminDashboard } from "@/pages/AdminDashboard";
 import { Loader2 } from "lucide-react";
@@ -36,8 +37,21 @@ function AppRoutes() {
     return <AdminDashboard onNavigate={navigate} path={path} />;
   }
 
+  // /pay/:token → customer payment page
+  const paymentMatch = path.match(/^\/pay\/(.+)$/);
+
   // /custom/product/:id → product detail page
   const productDetailMatch = path.match(/^\/custom\/product\/(.+)$/);
+
+  if (paymentMatch) {
+    return (
+      <div className="min-h-screen bg-ivory">
+        <Navbar onNavigate={navigate} currentPath={path} />
+        <PaymentPage token={paymentMatch[1]} onNavigate={navigate} />
+        <Footer onNavigate={navigate} />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-ivory">

@@ -137,6 +137,42 @@ export async function updateOrderStatus(id: string, status: string): Promise<voi
   if (error) throw error;
 }
 
+export async function updateOrderMemo(id: string, memo: string): Promise<void> {
+  const { error } = await supabase
+    .from("orders")
+    .update({ memo, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function generatePaymentToken(id: string): Promise<string> {
+  const token = crypto.randomUUID();
+  const { error } = await supabase
+    .from("orders")
+    .update({ payment_token: token, status: "payment_pending", updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+  return token;
+}
+
+export async function fetchOrderByToken(token: string): Promise<OrderRow | null> {
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("payment_token", token)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function confirmPaymentByToken(token: string): Promise<void> {
+  const { error } = await supabase
+    .from("orders")
+    .update({ status: "in_production", updated_at: new Date().toISOString() })
+    .eq("payment_token", token);
+  if (error) throw error;
+}
+
 export async function deleteOrder(id: string): Promise<void> {
   const { error } = await supabase.from("orders").delete().eq("id", id);
   if (error) throw error;

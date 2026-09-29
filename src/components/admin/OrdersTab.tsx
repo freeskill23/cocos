@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
-import { Trash2, ChevronDown, ChevronUp, Loader2, RefreshCw } from "lucide-react";
-import { fetchAllOrders, updateOrderStatus, deleteOrder } from "@/lib/api";
+import { Trash2, ChevronDown, ChevronUp, Loader2, RefreshCw, Link2, Copy, Check, Printer, Save } from "lucide-react";
+import { fetchAllOrders, updateOrderStatus, updateOrderMemo, deleteOrder, generatePaymentToken } from "@/lib/api";
 import type { OrderRow } from "@/types/database";
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, type OrderStatus } from "@/lib/supabase";
 import { formatWon } from "@/lib/pricing";
+import { BRAND } from "@/config/brand";
 
 interface OrdersTabProps {
   onCountChange: (n: number) => void;
@@ -50,6 +51,24 @@ export function OrdersTab({ onCountChange }: OrdersTabProps) {
       setOrders((prev) => prev.filter((o) => o.id !== id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "삭제에 실패했습니다.");
+    }
+  };
+
+  const handleMemoSave = async (id: string, memo: string) => {
+    try {
+      await updateOrderMemo(id, memo);
+      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, memo } : o)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "메모 저장에 실패했습니다.");
+    }
+  };
+
+  const handleGeneratePaymentLink = async (id: string) => {
+    try {
+      const token = await generatePaymentToken(id);
+      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, payment_token: token, status: "payment_pending" } : o)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "결제 링크 생성에 실패했습니다.");
     }
   };
 
@@ -102,6 +121,8 @@ export function OrdersTab({ onCountChange }: OrdersTabProps) {
               onToggle={() => setExpandedId(expandedId === order.id ? null : order.id)}
               onStatusChange={handleStatusChange}
               onDelete={handleDelete}
+              onMemoSave={handleMemoSave}
+              onGeneratePaymentLink={handleGeneratePaymentLink}
             />
           ))}
         </div>
@@ -137,15 +158,97 @@ function OrderCard({
   onToggle,
   onStatusChange,
   onDelete,
+  onMemoSave,
+  onGeneratePaymentLink,
 }: {
   order: OrderRow;
   expanded: boolean;
   onToggle: () => void;
   onStatusChange: (id: string, status: OrderStatus) => void;
   onDelete: (id: string) => void;
+  onMemoSave: (id: string, memo: string) => void;
+  onGeneratePaymentLink: (id: string) => void;
 }) {
   const status = order.status as OrderStatus;
   const created = new Date(order.created_at);
+  const [editingMemo, setEditingMemo] = useState(false);
+  const [memoDraft, setMemoDraft] = useState(order.memo ?? "");
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  useEffect(() => {
+    setMemoDraft(order.memo ?? "");
+  }, [order.memo]);
+
+  const handleCopyLink = () => {
+    const base = window.location.origin + window.location.pathname.replace(/index\.html$/, "");
+    const link = `${base}#/pay/${order.payment_token}`;
+    navigator.clipboard.writeText(link).then(() => {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    });
+  };
+
+  const handleSaveMemo = () => {
+    onMemoSave(order.id, memoDraft.trim());
+    setEditingMemo(false);
+  };
+
+  const handlePrint = () => {
+    const win = window.open("", "_blank", "width=800,height=600");
+    if (!win) return;
+    const options = (order.selected_options ?? [])
+      .map((s) => `<tr><td style="padding:4px 0;color:#666;">${s.optionName}</td><td style="padding:4px 0;font-weight:500;">${s.valueLabel}${s.price > 0 ? " (+" + s.price.toLocaleString("ko-KR") + "원)" : ""}</td></tr>`)
+      .join("");
+    win.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>주문서 - ${order.customer_name}</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font-family: 'Noto Sans KR', sans-serif; padding: 40px; color: #222; }
+      h1 { font-size: 22px; margin-bottom: 8px; }
+      .subtitle { font-size: 13px; color: #888; margin-bottom: 32px; }
+      .section { margin-bottom: 24px; }
+      .section-title { font-size: 14px; font-weight: 700; border-bottom: 2px solid #333; padding-bottom: 6px; margin-bottom: 12px; }
+      table { width: 100%; border-collapse: collapse; }
+      td { padding: 6px 0; font-size: 14px; vertical-align: top; }
+      td:first-child { width: 120px; color: #888; }
+      td:last-child { font-weight: 500; }
+      .total { text-align: right; font-size: 20px; font-weight: 700; margin-top: 16px; }
+      .memo-box { background: #f8f6f2; border-radius: 8px; padding: 12px 16px; font-size: 14px; min-height: 40px; white-space: pre-wrap; }
+      @media print { body { padding: 20px; } .no-print { display: none; } }
+    </style></head><body>
+    <h1>${BRAND.nameKr} 주문서</h1>
+    <p class="subtitle">주문번호: ${order.id.slice(0, 8)} · ${created.toLocaleDateString("ko-KR")} ${created.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</p>
+    <div class="section">
+      <div class="section-title">제작 정보</div>
+      <table>
+        <tr><td>상품명</td><td>${order.product_name ?? "-"}</td></tr>
+        <tr><td>가로</td><td>${order.width}mm</td></tr>
+        <tr><td>세로</td><td>${order.depth}mm</td></tr>
+        <tr><td>높이</td><td>${order.height}mm</td></tr>
+        ${options}
+      </table>
+    </div>
+    <div class="section">
+      <div class="section-title">고객 정보</div>
+      <table>
+        <tr><td>주문자명</td><td>${order.customer_name}</td></tr>
+        <tr><td>연락처</td><td>${order.customer_phone}</td></tr>
+        <tr><td>주소</td><td>${(order.customer_postcode ?? "") + " " + order.customer_address + " " + (order.customer_detail_address ?? "")}</td></tr>
+      </table>
+    </div>
+    <div class="section">
+      <div class="section-title">메모</div>
+      <div class="memo-box">${order.memo ?? "—"}</div>
+    </div>
+    <p class="total">총 금액: ${order.total_price.toLocaleString("ko-KR")}원</p>
+    <div class="no-print" style="margin-top:32px;text-align:center;">
+      <button onclick="window.print()" style="padding:10px 24px;background:#222;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;">인쇄하기</button>
+    </div>
+    </body></html>`);
+    win.document.close();
+  };
+
+  const showPaymentLink = status === "payment_pending" && order.payment_token;
+  const canGenerateLink = status === "received";
 
   return (
     <div className="overflow-hidden rounded-2xl border border-birch-200 bg-white">
@@ -180,7 +283,50 @@ function OrderCard({
                 {(order.selected_options ?? []).map((s, i) => (
                   <DetailRow key={i} label={s.optionName} value={s.price > 0 ? `${s.valueLabel} (+${formatWon(s.price)})` : s.valueLabel} />
                 ))}
-                {order.memo && <DetailRow label="메모" value={order.memo} />}
+              </div>
+
+              <div className="mt-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-semibold text-charcoal-muted">메모</h4>
+                  {!editingMemo && (
+                    <button
+                      onClick={() => setEditingMemo(true)}
+                      className="text-[11px] font-medium text-birch-500 hover:text-birch-600"
+                    >
+                      수정
+                    </button>
+                  )}
+                </div>
+                {editingMemo ? (
+                  <div className="mt-2">
+                    <textarea
+                      value={memoDraft}
+                      onChange={(e) => setMemoDraft(e.target.value)}
+                      rows={3}
+                      className="w-full resize-none rounded-xl border border-birch-200 bg-white px-3 py-2 text-sm text-charcoal focus:border-birch-400 focus:outline-none focus:ring-2 focus:ring-birch-200"
+                      placeholder="관리자 메모를 입력하세요."
+                    />
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        onClick={handleSaveMemo}
+                        className="inline-flex items-center gap-1 rounded-lg bg-charcoal px-3 py-1.5 text-xs font-medium text-ivory hover:bg-charcoal-light"
+                      >
+                        <Save size={12} />
+                        저장
+                      </button>
+                      <button
+                        onClick={() => { setEditingMemo(false); setMemoDraft(order.memo ?? ""); }}
+                        className="rounded-lg border border-birch-200 px-3 py-1.5 text-xs font-medium text-charcoal-muted hover:bg-birch-50"
+                      >
+                        취소
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-2 rounded-xl bg-birch-50 px-3 py-2 text-sm text-charcoal min-h-[36px] whitespace-pre-wrap">
+                    {order.memo || "—"}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -198,6 +344,39 @@ function OrderCard({
                 <DetailRow label="총 견적" value={formatWon(order.total_price)} />
               </div>
 
+              {canGenerateLink && (
+                <div className="mt-4">
+                  <button
+                    onClick={() => onGeneratePaymentLink(order.id)}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-birch-600 px-4 py-2.5 text-xs font-medium text-white transition-colors hover:bg-birch-700"
+                  >
+                    <Link2 size={14} />
+                    접수완료 · 결제 링크 생성
+                  </button>
+                  <p className="mt-2 text-[11px] text-charcoal-muted">
+                    결제 링크가 생성되면 고객에게 전달해주세요. 고객이 결제를 완료하면 자동으로 제작 중으로 전환됩니다.
+                  </p>
+                </div>
+              )}
+
+              {showPaymentLink && (
+                <div className="mt-4 rounded-xl border border-birch-200 bg-birch-50 p-3">
+                  <p className="text-xs font-semibold text-charcoal">고객 결제 링크</p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <code className="flex-1 truncate rounded-lg bg-white px-3 py-2 text-[11px] text-charcoal-muted">
+                      {window.location.origin}{window.location.pathname.replace(/index\.html$/, "")}#/pay/{order.payment_token}
+                    </code>
+                    <button
+                      onClick={handleCopyLink}
+                      className="inline-flex items-center gap-1 rounded-lg border border-birch-200 bg-white px-3 py-2 text-xs font-medium text-charcoal transition-colors hover:bg-birch-100"
+                    >
+                      {linkCopied ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+                      {linkCopied ? "복사됨" : "복사"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-5">
                 <label className="text-xs font-semibold text-charcoal-muted">주문 상태 변경</label>
                 <select
@@ -214,6 +393,13 @@ function OrderCard({
               </div>
 
               <div className="mt-5 flex gap-2">
+                <button
+                  onClick={handlePrint}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-birch-200 px-3 py-2 text-xs font-medium text-charcoal transition-colors hover:bg-birch-50"
+                >
+                  <Printer size={14} />
+                  주문서 출력
+                </button>
                 <button
                   onClick={() => onDelete(order.id)}
                   className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-red-600 transition-colors hover:bg-red-50"

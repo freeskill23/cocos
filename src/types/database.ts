@@ -50,6 +50,7 @@ export interface OrderRow {
   selected_options: SelectedOption[] | null;
   memo: string | null;
   status: string;
+  payment_token: string | null;
   created_at: string;
   updated_at: string;
 }
