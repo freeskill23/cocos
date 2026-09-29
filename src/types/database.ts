@@ -24,6 +24,13 @@ export interface CategoryRow {
   created_at: string;
 }
 
+export interface ProductCategoryRow {
+  id: string;
+  product_id: string;
+  category_id: string;
+  created_at: string;
+}
+
 export interface ProductRow {
   id: string;
   name: string;
@@ -37,7 +44,7 @@ export interface ProductRow {
   options: ProductOption[];
   is_active: boolean;
   display_order: number;
-  category_id: string | null;
+  category_ids: string[];
   size_customizable: boolean;
   created_at: string;
   updated_at: string;

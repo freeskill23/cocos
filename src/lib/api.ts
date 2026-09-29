@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import type { OrderRow, PortfolioRow, ReviewRow, SettingsMap, ProductRow, SelectedOption, CategoryRow, CartItemRow } from "@/types/database";
+import type { OrderRow, PortfolioRow, ReviewRow, SettingsMap, ProductRow, SelectedOption, CategoryRow, CartItemRow, ProductCategoryRow } from "@/types/database";
 
 export async function fetchActiveCategories(): Promise<CategoryRow[]> {
   const { data, error } = await supabase
@@ -30,18 +30,70 @@ export async function deleteCategory(id: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function fetchAllProductCategories(): Promise<ProductCategoryRow[]> {
+  const { data, error } = await supabase
+    .from("product_categories")
+    .select("*");
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function fetchProductCategoryIds(productId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("product_categories")
+    .select("category_id")
+    .eq("product_id", productId);
+  if (error) throw error;
+  return (data ?? []).map((r) => r.category_id);
+}
+
+export async function setProductCategories(productId: string, categoryIds: string[]): Promise<void> {
+  await supabase.from("product_categories").delete().eq("product_id", productId);
+  if (categoryIds.length > 0) {
+    const rows = categoryIds.map((cid) => ({ product_id: productId, category_id: cid }));
+    const { error } = await supabase.from("product_categories").insert(rows);
+    if (error) throw error;
+  }
+}
+
 export async function fetchActiveProducts(categoryId?: string): Promise<ProductRow[]> {
+  let productIds: string[] | null = null;
+  if (categoryId) {
+    const { data: pcData, error: pcError } = await supabase
+      .from("product_categories")
+      .select("product_id")
+      .eq("category_id", categoryId);
+    if (pcError) throw pcError;
+    productIds = (pcData ?? []).map((r) => r.product_id);
+    if (productIds.length === 0) return [];
+  }
+
   let query = supabase
     .from("products")
     .select("*")
     .eq("is_active", true)
     .order("display_order", { ascending: true });
-  if (categoryId) {
-    query = query.eq("category_id", categoryId);
+  if (productIds) {
+    query = query.in("id", productIds);
   }
   const { data, error } = await query;
   if (error) throw error;
-  return data ?? [];
+
+  const products = data ?? [];
+  if (products.length === 0) return [];
+
+  const { data: pcData } = await supabase
+    .from("product_categories")
+    .select("product_id, category_id")
+    .in("product_id", products.map((p) => p.id));
+
+  const pcMap: Record<string, string[]> = {};
+  for (const pc of pcData ?? []) {
+    if (!pcMap[pc.product_id]) pcMap[pc.product_id] = [];
+    pcMap[pc.product_id].push(pc.category_id);
+  }
+
+  return products.map((p) => ({ ...p, category_ids: pcMap[p.id] ?? [] }));
 }
 
 export async function fetchAllProducts(): Promise<ProductRow[]> {
@@ -50,15 +102,53 @@ export async function fetchAllProducts(): Promise<ProductRow[]> {
     .select("*")
     .order("display_order", { ascending: true });
   if (error) throw error;
-  return data ?? [];
+
+  const products = data ?? [];
+  if (products.length === 0) return [];
+
+  const { data: pcData } = await supabase
+    .from("product_categories")
+    .select("product_id, category_id")
+    .in("product_id", products.map((p) => p.id));
+
+  const pcMap: Record<string, string[]> = {};
+  for (const pc of pcData ?? []) {
+    if (!pcMap[pc.product_id]) pcMap[pc.product_id] = [];
+    pcMap[pc.product_id].push(pc.category_id);
+  }
+
+  return products.map((p) => ({ ...p, category_ids: pcMap[p.id] ?? [] }));
 }
 
-export async function upsertProduct(item: Partial<ProductRow> & { name: string; base_price: number; base_width: number; base_depth: number; base_height: number }): Promise<void> {
-  const { error } = await supabase.from("products").upsert({
-    ...item,
+export interface ProductUpsertData {
+  id?: string;
+  name: string;
+  description: string;
+  image_url: string | null;
+  detail_content: string;
+  base_width: number;
+  base_depth: number;
+  base_height: number;
+  base_price: number;
+  display_order: number;
+  is_active: boolean;
+  size_customizable: boolean;
+  options: ProductRow["options"];
+  category_ids?: string[];
+}
+
+export async function upsertProduct(item: ProductUpsertData): Promise<string> {
+  const { category_ids, ...productData } = item;
+  const { data, error } = await supabase.from("products").upsert({
+    ...productData,
     updated_at: new Date().toISOString(),
-  });
+  }).select("id").single();
   if (error) throw error;
+  const productId = data.id;
+  if (category_ids !== undefined) {
+    await setProductCategories(productId, category_ids);
+  }
+  return productId;
 }
 
 export async function fetchProductById(id: string): Promise<ProductRow | null> {
@@ -68,7 +158,9 @@ export async function fetchProductById(id: string): Promise<ProductRow | null> {
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
-  return data;
+  if (!data) return null;
+  const categoryIds = await fetchProductCategoryIds(id);
+  return { ...data, category_ids: categoryIds };
 }
 
 export async function deleteProduct(id: string): Promise<void> {

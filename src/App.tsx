@@ -47,6 +47,9 @@ function AppRoutes() {
   // /product/:id → product detail page
   const productMatch = path.match(/^\/product\/(.+)$/);
 
+  // /category/:id → shop page filtered by category
+  const categoryMatch = path.match(/^\/category\/(.+)$/);
+
   // /custom/product/:id → legacy product detail (redirect to /product/:id)
   const legacyProductMatch = path.match(/^\/custom\/product\/(.+)$/);
 
@@ -75,6 +78,8 @@ function AppRoutes() {
         <ProductDetailPage productId={productId} onNavigate={navigate} />
       ) : path.startsWith("/custom") ? (
         <CustomPage onNavigate={navigate} />
+      ) : categoryMatch ? (
+        <ShopPage onNavigate={navigate} categoryId={categoryMatch[1]} />
       ) : (
         <ShopPage onNavigate={navigate} />
       )}

@@ -6,19 +6,22 @@ import { formatWon } from "@/lib/pricing";
 
 interface ShopPageProps {
   onNavigate: (to: string) => void;
+  categoryId?: string;
 }
 
-export function ShopPage({ onNavigate }: ShopPageProps) {
+export function ShopPage({ onNavigate, categoryId }: ShopPageProps) {
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        const [cats, prods] = await Promise.all([fetchActiveCategories(), fetchActiveProducts()]);
+        const [cats, prods] = await Promise.all([
+          fetchActiveCategories(),
+          fetchActiveProducts(categoryId),
+        ]);
         setCategories(cats);
         setProducts(prods);
       } catch {
@@ -27,27 +30,29 @@ export function ShopPage({ onNavigate }: ShopPageProps) {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [categoryId]);
 
-  const filtered = selectedCategory
-    ? products.filter((p) => p.category_id === selectedCategory)
-    : products;
+  const currentCategory = categoryId
+    ? categories.find((c) => c.id === categoryId)
+    : null;
 
   return (
     <main className="min-h-screen bg-ivory pt-20 md:pt-24">
       <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8 md:py-16 lg:px-12">
         <div className="mb-10 text-center">
           <p className="text-xs font-semibold tracking-[0.25em] text-charcoal-muted">COCOS FURNITURE</p>
-          <h1 className="mt-3 font-serif text-3xl text-charcoal sm:text-4xl">제품 둘러보기</h1>
+          <h1 className="mt-3 font-serif text-3xl text-charcoal sm:text-4xl">
+            {currentCategory ? currentCategory.name : "제품 둘러보기"}
+          </h1>
           <p className="mt-4 text-sm text-charcoal-muted">반려동물을 위한 자작나무 가구</p>
         </div>
 
         {categories.length > 0 && (
           <div className="mb-10 flex flex-wrap justify-center gap-2">
             <button
-              onClick={() => setSelectedCategory(null)}
+              onClick={() => onNavigate("/")}
               className={`rounded-full px-5 py-2.5 text-sm font-medium transition-colors ${
-                !selectedCategory ? "bg-charcoal text-ivory" : "bg-white text-charcoal border border-birch-200 hover:border-birch-400"
+                !categoryId ? "bg-charcoal text-ivory" : "bg-white text-charcoal border border-birch-200 hover:border-birch-400"
               }`}
             >
               전체
@@ -55,9 +60,9 @@ export function ShopPage({ onNavigate }: ShopPageProps) {
             {categories.map((cat) => (
               <button
                 key={cat.id}
-                onClick={() => setSelectedCategory(cat.id)}
+                onClick={() => onNavigate(`/category/${cat.id}`)}
                 className={`rounded-full px-5 py-2.5 text-sm font-medium transition-colors ${
-                  selectedCategory === cat.id ? "bg-charcoal text-ivory" : "bg-white text-charcoal border border-birch-200 hover:border-birch-400"
+                  categoryId === cat.id ? "bg-charcoal text-ivory" : "bg-white text-charcoal border border-birch-200 hover:border-birch-400"
                 }`}
               >
                 {cat.name}
@@ -70,14 +75,14 @@ export function ShopPage({ onNavigate }: ShopPageProps) {
           <div className="flex justify-center py-24">
             <Loader2 size={28} className="animate-spin text-birch-400" />
           </div>
-        ) : filtered.length === 0 ? (
+        ) : products.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-24 text-center">
             <Package size={36} className="text-birch-300" />
             <p className="text-sm text-charcoal-muted">등록된 상품이 없습니다.</p>
           </div>
         ) : (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filtered.map((product) => (
+            {products.map((product) => (
               <button
                 key={product.id}
                 onClick={() => onNavigate(`/product/${product.id}`)}

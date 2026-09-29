@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { Menu, X, ShoppingBag, User } from "lucide-react";
-import { BRAND, NAV_LINKS } from "@/config/brand";
+import { BRAND } from "@/config/brand";
 import { useCart } from "@/hooks/useCart";
 import { useAuth } from "@/hooks/useAuth";
+import { fetchActiveCategories } from "@/lib/api";
+import type { CategoryRow } from "@/types/database";
 
 interface NavbarProps {
   onNavigate: (to: string) => void;
@@ -12,6 +14,7 @@ interface NavbarProps {
 export function Navbar({ onNavigate, currentPath }: NavbarProps) {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [categories, setCategories] = useState<CategoryRow[]>([]);
   const { count } = useCart();
   const { session } = useAuth();
 
@@ -23,6 +26,10 @@ export function Navbar({ onNavigate, currentPath }: NavbarProps) {
   }, []);
 
   useEffect(() => {
+    fetchActiveCategories().then(setCategories).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     document.body.style.overflow = menuOpen ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [menuOpen]);
@@ -31,6 +38,10 @@ export function Navbar({ onNavigate, currentPath }: NavbarProps) {
     setMenuOpen(false);
     onNavigate(href);
   };
+
+  const isCategoryActive = (catId: string) => currentPath === `/category/${catId}`;
+  const isAllActive = currentPath === "/" || currentPath === "";
+  const isCustomActive = currentPath === "/custom";
 
   return (
     <>
@@ -56,18 +67,35 @@ export function Navbar({ onNavigate, currentPath }: NavbarProps) {
               </span>
             </button>
 
-            <div className="hidden items-center gap-8 md:flex">
-              {NAV_LINKS.map((link) => (
+            <div className="hidden items-center gap-6 md:flex">
+              <button
+                onClick={() => handleNavClick("/")}
+                className={`text-sm font-medium transition-colors hover:text-charcoal ${
+                  isAllActive ? "text-charcoal" : "text-charcoal-light"
+                }`}
+              >
+                전체
+              </button>
+              {categories.map((cat) => (
                 <button
-                  key={link.href}
-                  onClick={() => handleNavClick(link.href)}
+                  key={cat.id}
+                  onClick={() => handleNavClick(`/category/${cat.id}`)}
                   className={`text-sm font-medium transition-colors hover:text-charcoal ${
-                    currentPath === link.href ? "text-charcoal" : "text-charcoal-light"
+                    isCategoryActive(cat.id) ? "text-charcoal" : "text-charcoal-light"
                   }`}
                 >
-                  {link.label}
+                  {cat.name}
                 </button>
               ))}
+              <span className="h-4 w-px bg-birch-200" />
+              <button
+                onClick={() => handleNavClick("/custom")}
+                className={`text-sm font-medium transition-colors hover:text-charcoal ${
+                  isCustomActive ? "text-charcoal" : "text-charcoal-light"
+                }`}
+              >
+                맞춤 제작
+              </button>
             </div>
 
             <div className="flex items-center gap-3">
@@ -104,25 +132,38 @@ export function Navbar({ onNavigate, currentPath }: NavbarProps) {
 
       {menuOpen && (
         <div className="fixed inset-0 top-16 z-40 bg-ivory md:hidden">
-          <div className="flex flex-col gap-2 px-6 py-8">
-            {NAV_LINKS.map((link) => (
+          <div className="flex flex-col gap-1 px-6 py-8">
+            <button
+              onClick={() => handleNavClick("/")}
+              className="rounded-xl px-4 py-3.5 text-left text-base font-medium text-charcoal transition-colors hover:bg-birch-100"
+            >
+              전체
+            </button>
+            {categories.map((cat) => (
               <button
-                key={link.href}
-                onClick={() => handleNavClick(link.href)}
-                className="rounded-xl px-4 py-4 text-left text-lg font-medium text-charcoal transition-colors hover:bg-birch-100"
+                key={cat.id}
+                onClick={() => handleNavClick(`/category/${cat.id}`)}
+                className="rounded-xl px-4 py-3.5 text-left text-base font-medium text-charcoal transition-colors hover:bg-birch-100"
               >
-                {link.label}
+                {cat.name}
               </button>
             ))}
+            <div className="my-2 h-px bg-birch-200" />
+            <button
+              onClick={() => handleNavClick("/custom")}
+              className="rounded-xl px-4 py-3.5 text-left text-base font-medium text-charcoal transition-colors hover:bg-birch-100"
+            >
+              맞춤 제작
+            </button>
             <button
               onClick={() => handleNavClick("/cart")}
-              className="rounded-xl px-4 py-4 text-left text-lg font-medium text-charcoal transition-colors hover:bg-birch-100"
+              className="rounded-xl px-4 py-3.5 text-left text-base font-medium text-charcoal transition-colors hover:bg-birch-100"
             >
               장바구니 {count > 0 && `(${count})`}
             </button>
             <button
               onClick={() => handleNavClick(session ? "/account" : "/auth")}
-              className="rounded-xl px-4 py-4 text-left text-lg font-medium text-charcoal transition-colors hover:bg-birch-100"
+              className="rounded-xl px-4 py-3.5 text-left text-base font-medium text-charcoal transition-colors hover:bg-birch-100"
             >
               {session ? "내 계정" : "로그인 / 회원가입"}
             </button>

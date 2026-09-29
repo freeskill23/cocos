@@ -162,7 +162,7 @@ function ProductEditor({
   const [basePrice, setBasePrice] = useState(item?.base_price ?? 50000);
   const [order, setOrder] = useState(item?.display_order ?? 0);
   const [active, setActive] = useState(item?.is_active ?? true);
-  const [categoryId, setCategoryId] = useState<string | null>(item?.category_id ?? null);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(item?.category_ids ?? []);
   const [sizeCustomizable, setSizeCustomizable] = useState(item?.size_customizable ?? true);
   const [options, setOptions] = useState<ProductOption[]>(
     (item?.options ?? []).map((o) => ({
@@ -194,7 +194,7 @@ function ProductEditor({
         base_price: basePrice,
         display_order: order,
         is_active: active,
-        category_id: categoryId,
+        category_ids: selectedCategoryIds,
         size_customizable: sizeCustomizable,
         options,
       });
@@ -233,17 +233,32 @@ function ProductEditor({
             maxHeight={1200}
           />
 
-          <FormField label="카테고리">
-            <select
-              value={categoryId ?? ""}
-              onChange={(e) => setCategoryId(e.target.value || null)}
-              className="input-field"
-            >
-              <option value="">카테고리 없음</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
-              ))}
-            </select>
+          <FormField label="카테고리 (복수 선택 가능)">
+            <div className="flex flex-wrap gap-2">
+              {categories.length === 0 ? (
+                <p className="text-xs text-charcoal-muted">등록된 카테고리가 없습니다. 먼저 카테고리 관리에서 카테고리를 추가해주세요.</p>
+              ) : (
+                categories.map((cat) => {
+                  const isSelected = selectedCategoryIds.includes(cat.id);
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCategoryIds((prev) =>
+                          isSelected ? prev.filter((id) => id !== cat.id) : [...prev, cat.id]
+                        );
+                      }}
+                      className={`rounded-lg border-2 px-3 py-2 text-xs font-medium transition-all ${
+                        isSelected ? "border-charcoal bg-charcoal text-ivory" : "border-birch-200 bg-white text-charcoal hover:border-birch-400"
+                      }`}
+                    >
+                      {cat.name}
+                    </button>
+                  );
+                })
+              )}
+            </div>
           </FormField>
 
           <FormField label="사이즈 변경">
