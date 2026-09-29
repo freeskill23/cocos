@@ -50,7 +50,7 @@ function loadSDK(): Promise<PortOneSDK> {
 
   sdkPromise = new Promise<PortOneSDK>((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>(
-      'script[src="https://cdn.portone.io/v2/sdk.js"]'
+      'script[src="https://cdn.portone.io/v2/browser-sdk.js"]'
     );
     if (existing) {
       existing.addEventListener("load", () => {
@@ -63,7 +63,7 @@ function loadSDK(): Promise<PortOneSDK> {
       return;
     }
     const script = document.createElement("script");
-    script.src = "https://cdn.portone.io/v2/sdk.js";
+    script.src = "https://cdn.portone.io/v2/browser-sdk.js";
     script.async = true;
     script.onload = () => {
       if (window.PortOne) resolve(window.PortOne);
