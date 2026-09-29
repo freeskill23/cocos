@@ -16,6 +16,14 @@ export interface SelectedOption {
   price: number;
 }
 
+export interface CategoryRow {
+  id: string;
+  name: string;
+  display_order: number;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface ProductRow {
   id: string;
   name: string;
@@ -29,6 +37,8 @@ export interface ProductRow {
   options: ProductOption[];
   is_active: boolean;
   display_order: number;
+  category_id: string | null;
+  size_customizable: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -100,6 +110,22 @@ export interface SizeSettings {
   maxDepth: number;
   minHeight: number;
   maxHeight: number;
+}
+
+export interface CartItemRow {
+  id: string;
+  session_id: string | null;
+  user_id: string | null;
+  product_id: string;
+  product_name: string;
+  width: number;
+  depth: number;
+  height: number;
+  selected_options: SelectedOption[] | null;
+  unit_price: number;
+  quantity: number;
+  memo: string | null;
+  created_at: string;
 }
 
 export interface SettingsMap {

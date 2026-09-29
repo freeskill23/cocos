@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { Menu, X } from "lucide-react";
+import { Menu, X, ShoppingBag, User } from "lucide-react";
 import { BRAND, NAV_LINKS } from "@/config/brand";
-import { scrollToId } from "@/lib/router";
+import { useCart } from "@/hooks/useCart";
+import { useAuth } from "@/hooks/useAuth";
 
 interface NavbarProps {
   onNavigate: (to: string) => void;
@@ -11,6 +12,8 @@ interface NavbarProps {
 export function Navbar({ onNavigate, currentPath }: NavbarProps) {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const { count } = useCart();
+  const { session } = useAuth();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -26,16 +29,7 @@ export function Navbar({ onNavigate, currentPath }: NavbarProps) {
 
   const handleNavClick = (href: string) => {
     setMenuOpen(false);
-    if (href.startsWith("/#")) {
-      const id = href.slice(2);
-      if (currentPath !== "/" && currentPath !== "") {
-        onNavigate(`/#${id}`);
-      } else {
-        scrollToId(id);
-      }
-    } else {
-      onNavigate(href);
-    }
+    onNavigate(href);
   };
 
   return (
@@ -52,7 +46,7 @@ export function Navbar({ onNavigate, currentPath }: NavbarProps) {
             <button
               onClick={() => handleNavClick("/")}
               className="flex flex-col items-start leading-none"
-              aria-label="코코스퍼니쳐 홈"
+              aria-label={`${BRAND.nameKr} 홈`}
             >
               <span className="text-base font-bold tracking-tight text-charcoal md:text-lg">
                 {BRAND.nameEn}
@@ -67,7 +61,9 @@ export function Navbar({ onNavigate, currentPath }: NavbarProps) {
                 <button
                   key={link.href}
                   onClick={() => handleNavClick(link.href)}
-                  className="text-sm font-medium text-charcoal-light transition-colors hover:text-charcoal"
+                  className={`text-sm font-medium transition-colors hover:text-charcoal ${
+                    currentPath === link.href ? "text-charcoal" : "text-charcoal-light"
+                  }`}
                 >
                   {link.label}
                 </button>
@@ -76,10 +72,23 @@ export function Navbar({ onNavigate, currentPath }: NavbarProps) {
 
             <div className="flex items-center gap-3">
               <button
-                onClick={() => handleNavClick("/custom")}
-                className="hidden rounded-full bg-charcoal px-5 py-2.5 text-sm font-medium text-ivory transition-all hover:bg-charcoal-light active:scale-95 sm:inline-flex"
+                onClick={() => handleNavClick("/cart")}
+                className="relative inline-flex h-10 w-10 items-center justify-center text-charcoal transition-colors hover:text-charcoal-light"
+                aria-label="장바구니"
               >
-                우리 아이 집 만들기
+                <ShoppingBag size={20} />
+                {count > 0 && (
+                  <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-birch-600 px-1 text-[10px] font-bold text-white">
+                    {count}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => handleNavClick(session ? "/account" : "/auth")}
+                className="hidden h-10 w-10 items-center justify-center text-charcoal transition-colors hover:text-charcoal-light sm:inline-flex"
+                aria-label="계정"
+              >
+                <User size={20} />
               </button>
               <button
                 onClick={() => setMenuOpen(!menuOpen)}
@@ -106,10 +115,16 @@ export function Navbar({ onNavigate, currentPath }: NavbarProps) {
               </button>
             ))}
             <button
-              onClick={() => handleNavClick("/custom")}
-              className="mt-4 rounded-full bg-charcoal px-5 py-4 text-center text-base font-medium text-ivory"
+              onClick={() => handleNavClick("/cart")}
+              className="rounded-xl px-4 py-4 text-left text-lg font-medium text-charcoal transition-colors hover:bg-birch-100"
             >
-              우리 아이 집 만들기
+              장바구니 {count > 0 && `(${count})`}
+            </button>
+            <button
+              onClick={() => handleNavClick(session ? "/account" : "/auth")}
+              className="rounded-xl px-4 py-4 text-left text-lg font-medium text-charcoal transition-colors hover:bg-birch-100"
+            >
+              {session ? "내 계정" : "로그인 / 회원가입"}
             </button>
           </div>
         </div>

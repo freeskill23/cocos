@@ -1,20 +1,21 @@
 import { useEffect, useState, useCallback } from "react";
-import { LogOut, LayoutDashboard, Package, Boxes, Images, Star, Settings, Menu, X } from "lucide-react";
+import { LogOut, LayoutDashboard, Package, Boxes, Images, Star, Settings, Menu, X, Tag } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { BRAND } from "@/config/brand";
 import { OrdersTab } from "@/components/admin/OrdersTab";
 import { ProductsTab } from "@/components/admin/ProductsTab";
+import { CategoriesTab } from "@/components/admin/CategoriesTab";
 import { PortfolioTab } from "@/components/admin/PortfolioTab";
 import { ReviewsTab } from "@/components/admin/ReviewsTab";
 import { SettingsTab } from "@/components/admin/SettingsTab";
 
-type TabId = "dashboard" | "orders" | "products" | "portfolio" | "reviews" | "settings";
+type TabId = "dashboard" | "orders" | "products" | "categories" | "portfolio" | "reviews" | "settings";
 
 function tabFromPath(path: string): TabId {
   const match = path.match(/^\/admin\/?(\w*)/);
   const segment = match?.[1];
-  const valid: TabId[] = ["dashboard", "orders", "products", "portfolio", "reviews", "settings"];
+  const valid: TabId[] = ["dashboard", "orders", "products", "categories", "portfolio", "reviews", "settings"];
   return (valid.includes(segment as TabId) ? segment : "dashboard") as TabId;
 }
 
@@ -38,6 +39,7 @@ export function AdminDashboard({ onNavigate, path }: AdminDashboardProps) {
     { id: "dashboard", label: "대시보드", icon: LayoutDashboard },
     { id: "orders", label: "주문 관리", icon: Package },
     { id: "products", label: "상품 관리", icon: Boxes },
+    { id: "categories", label: "카테고리", icon: Tag },
     { id: "portfolio", label: "포트폴리오", icon: Images },
     { id: "reviews", label: "후기 관리", icon: Star },
     { id: "settings", label: "설정", icon: Settings },
@@ -118,6 +120,7 @@ export function AdminDashboard({ onNavigate, path }: AdminDashboardProps) {
           )}
           {tab === "orders" && <OrdersTab onCountChange={setOrderCount} />}
           {tab === "products" && <ProductsTab />}
+          {tab === "categories" && <CategoriesTab />}
           {tab === "portfolio" && <PortfolioTab />}
           {tab === "reviews" && <ReviewsTab />}
           {tab === "settings" && <SettingsTab />}

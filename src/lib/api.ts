@@ -1,12 +1,45 @@
 import { supabase } from "@/lib/supabase";
-import type { OrderRow, PortfolioRow, ReviewRow, SettingsMap, ProductRow, SelectedOption } from "@/types/database";
+import type { OrderRow, PortfolioRow, ReviewRow, SettingsMap, ProductRow, SelectedOption, CategoryRow, CartItemRow } from "@/types/database";
 
-export async function fetchActiveProducts(): Promise<ProductRow[]> {
+export async function fetchActiveCategories(): Promise<CategoryRow[]> {
   const { data, error } = await supabase
+    .from("categories")
+    .select("*")
+    .eq("is_active", true)
+    .order("display_order", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function fetchAllCategories(): Promise<CategoryRow[]> {
+  const { data, error } = await supabase
+    .from("categories")
+    .select("*")
+    .order("display_order", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function upsertCategory(item: Partial<CategoryRow> & { name: string }): Promise<void> {
+  const { error } = await supabase.from("categories").upsert(item);
+  if (error) throw error;
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  const { error } = await supabase.from("categories").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function fetchActiveProducts(categoryId?: string): Promise<ProductRow[]> {
+  let query = supabase
     .from("products")
     .select("*")
     .eq("is_active", true)
     .order("display_order", { ascending: true });
+  if (categoryId) {
+    query = query.eq("category_id", categoryId);
+  }
+  const { data, error } = await query;
   if (error) throw error;
   return data ?? [];
 }
@@ -195,5 +228,60 @@ export async function upsertReview(item: Partial<ReviewRow> & { dog_name: string
 
 export async function deleteReview(id: string): Promise<void> {
   const { error } = await supabase.from("reviews").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export interface CartItemInsert {
+  session_id: string | null;
+  user_id: string | null;
+  product_id: string;
+  product_name: string;
+  width: number;
+  depth: number;
+  height: number;
+  selected_options: SelectedOption[];
+  unit_price: number;
+  quantity: number;
+  memo: string | null;
+}
+
+export async function fetchCartItems(owner: { session_id: string } | { user_id: string }): Promise<CartItemRow[]> {
+  let query = supabase.from("cart_items").select("*").order("created_at", { ascending: false });
+  if ("session_id" in owner) {
+    query = query.eq("session_id", owner.session_id);
+  } else {
+    query = query.eq("user_id", owner.user_id);
+  }
+  const { data, error } = await query;
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function insertCartItem(item: CartItemInsert): Promise<void> {
+  const { error } = await supabase.from("cart_items").insert(item);
+  if (error) throw error;
+}
+
+export async function updateCartQuantity(id: string, quantity: number): Promise<void> {
+  const { error } = await supabase
+    .from("cart_items")
+    .update({ quantity })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteCartItem(id: string): Promise<void> {
+  const { error } = await supabase.from("cart_items").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteAllCartItems(owner: { session_id: string } | { user_id: string }): Promise<void> {
+  let query = supabase.from("cart_items").delete();
+  if ("session_id" in owner) {
+    query = query.eq("session_id", owner.session_id);
+  } else {
+    query = query.eq("user_id", owner.user_id);
+  }
+  const { error } = await query;
   if (error) throw error;
 }

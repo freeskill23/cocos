@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Plus, Trash2, Edit3, X, Loader2, Eye, EyeOff, Save, Package, GripVertical } from "lucide-react";
-import { fetchAllProducts, upsertProduct, deleteProduct } from "@/lib/api";
-import type { ProductRow, ProductOption, ProductOptionValue } from "@/types/database";
+import { fetchAllProducts, upsertProduct, deleteProduct, fetchAllCategories } from "@/lib/api";
+import type { ProductRow, ProductOption, ProductOptionValue, CategoryRow } from "@/types/database";
 import { formatWon } from "@/lib/pricing";
 import { ImageUpload } from "@/components/admin/ImageUpload";
 import { DetailEditor } from "@/components/admin/DetailEditor";
@@ -18,13 +18,15 @@ export function ProductsTab() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<ProductRow | null>(null);
   const [creating, setCreating] = useState(false);
+  const [categories, setCategories] = useState<CategoryRow[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchAllProducts();
+      const [data, cats] = await Promise.all([fetchAllProducts(), fetchAllCategories()]);
       setItems(data);
+      setCategories(cats);
     } catch (err) {
       setError(err instanceof Error ? err.message : "목록을 불러오지 못했습니다.");
     } finally {
@@ -123,6 +125,7 @@ export function ProductsTab() {
       {(editing || creating) && (
         <ProductEditor
           item={editing}
+          categories={categories}
           onClose={() => {
             setEditing(null);
             setCreating(false);
@@ -140,10 +143,12 @@ export function ProductsTab() {
 
 function ProductEditor({
   item,
+  categories,
   onClose,
   onSaved,
 }: {
   item: ProductRow | null;
+  categories: CategoryRow[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -157,6 +162,8 @@ function ProductEditor({
   const [basePrice, setBasePrice] = useState(item?.base_price ?? 50000);
   const [order, setOrder] = useState(item?.display_order ?? 0);
   const [active, setActive] = useState(item?.is_active ?? true);
+  const [categoryId, setCategoryId] = useState<string | null>(item?.category_id ?? null);
+  const [sizeCustomizable, setSizeCustomizable] = useState(item?.size_customizable ?? true);
   const [options, setOptions] = useState<ProductOption[]>(
     (item?.options ?? []).map((o) => ({
       ...o,
@@ -187,6 +194,8 @@ function ProductEditor({
         base_price: basePrice,
         display_order: order,
         is_active: active,
+        category_id: categoryId,
+        size_customizable: sizeCustomizable,
         options,
       });
       onSaved();
@@ -223,6 +232,29 @@ function ProductEditor({
             maxWidth={1200}
             maxHeight={1200}
           />
+
+          <FormField label="카테고리">
+            <select
+              value={categoryId ?? ""}
+              onChange={(e) => setCategoryId(e.target.value || null)}
+              className="input-field"
+            >
+              <option value="">카테고리 없음</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
+          </FormField>
+
+          <FormField label="사이즈 변경">
+            <button
+              type="button"
+              onClick={() => setSizeCustomizable(!sizeCustomizable)}
+              className={`flex w-full items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 text-sm font-medium transition-all ${sizeCustomizable ? "border-charcoal bg-birch-50 text-charcoal" : "border-birch-200 text-charcoal-muted"}`}
+            >
+              {sizeCustomizable ? "사이즈 변경 가능" : "사이즈 변경 불필요 (고정 사이즈)"}
+            </button>
+          </FormField>
 
           <FormField label="상세 페이지 구성">
             <DetailEditor value={detailContent} onChange={setDetailContent} />

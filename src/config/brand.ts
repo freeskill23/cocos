@@ -12,9 +12,6 @@ export const BRAND = {
 } as const;
 
 export const NAV_LINKS = [
+  { label: "제품", href: "/" },
   { label: "맞춤 제작", href: "/custom" },
-  { label: "제품 디자인", href: "/#designs" },
-  { label: "제작 사례", href: "/#portfolio" },
-  { label: "자작나무 소재", href: "/#material" },
-  { label: "후기", href: "/#reviews" },
 ] as const;

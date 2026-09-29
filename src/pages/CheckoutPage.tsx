@@ -1,0 +1,240 @@
+import { useState } from "react";
+import { Loader2, Check, ArrowRight, User, Mail, Lock } from "lucide-react";
+import { useCart } from "@/hooks/useCart";
+import { useAuth } from "@/hooks/useAuth";
+import { insertOrder, type OrderInsert } from "@/lib/api";
+import { formatWon } from "@/lib/pricing";
+
+interface CheckoutPageProps {
+  onNavigate: (to: string) => void;
+}
+
+export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
+  const { items, clear } = useCart();
+  const { session, signIn, signUp } = useAuth();
+  const [mode, setMode] = useState<"guest" | "login" | "signup">("guest");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  const [customer, setCustomer] = useState({
+    name: "",
+    phone: "",
+    postcode: "",
+    address: "",
+    detailAddress: "",
+    memo: "",
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const total = items.reduce((sum, i) => sum + i.unit_price * i.quantity, 0);
+  const isValid = customer.name.trim() && customer.phone.trim() && customer.address.trim();
+
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      const result = mode === "login"
+        ? await signIn(email.trim(), password)
+        : await signUp(email.trim(), password);
+      if (result.error) setAuthError(result.error);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!isValid || submitting) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      for (const item of items) {
+        const order: OrderInsert = {
+          product_id: item.product_id,
+          product_name: item.product_name,
+          width: item.width,
+          depth: item.depth,
+          height: item.height,
+          total_price: item.unit_price * item.quantity,
+          customer_name: customer.name.trim(),
+          customer_phone: customer.phone.trim(),
+          customer_email: session?.user?.email ?? null,
+          customer_postcode: customer.postcode.trim() || null,
+          customer_address: customer.address.trim(),
+          customer_detail_address: customer.detailAddress.trim() || null,
+          selected_options: item.selected_options ?? [],
+          memo: customer.memo.trim() || null,
+        };
+        await insertOrder(order);
+      }
+      await clear();
+      setSubmitted(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "주문 접수 중 오류가 발생했습니다.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (submitted) {
+    return (
+      <main className="min-h-screen bg-ivory pt-20 md:pt-24">
+        <div className="mx-auto max-w-2xl px-5 py-16 text-center">
+          <div className="flex h-20 w-20 mx-auto items-center justify-center rounded-full bg-green-100">
+            <Check size={36} className="text-green-600" />
+          </div>
+          <h2 className="mt-8 font-serif text-3xl text-charcoal">주문 완료</h2>
+          <p className="mt-4 text-sm text-charcoal-muted">
+            {customer.name}님, 주문해주셔서 감사합니다.
+            <br />
+            확인 후 1영업일 이내에 연락드리겠습니다.
+          </p>
+          <button onClick={() => onNavigate("/")} className="btn-primary mt-10">홈으로</button>
+        </div>
+      </main>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <main className="min-h-screen bg-ivory pt-20 md:pt-24">
+        <div className="mx-auto max-w-2xl px-5 py-16 text-center">
+          <p className="text-sm text-charcoal-muted">장바구니가 비어 있습니다.</p>
+          <button onClick={() => onNavigate("/")} className="btn-outline mt-6">상품 둘러보기</button>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-ivory pt-20 md:pt-24">
+      <div className="mx-auto max-w-4xl px-5 py-10 sm:px-8 md:py-16 lg:px-12">
+        <h1 className="font-serif text-3xl text-charcoal sm:text-4xl">주문서</h1>
+
+        {!session && (
+          <div className="mt-8 rounded-3xl border border-birch-200 bg-white p-6">
+            <div className="flex gap-2 rounded-xl bg-birch-50 p-1">
+              <button onClick={() => { setMode("guest"); setAuthError(null); }} className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors ${mode === "guest" ? "bg-charcoal text-ivory" : "text-charcoal-muted"}`}>
+                비회원 구매
+              </button>
+              <button onClick={() => { setMode("login"); setAuthError(null); }} className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors ${mode === "login" ? "bg-charcoal text-ivory" : "text-charcoal-muted"}`}>
+                로그인
+              </button>
+              <button onClick={() => { setMode("signup"); setAuthError(null); }} className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors ${mode === "signup" ? "bg-charcoal text-ivory" : "text-charcoal-muted"}`}>
+                회원가입
+              </button>
+            </div>
+
+            {(mode === "login" || mode === "signup") && (
+              <form onSubmit={handleAuth} className="mt-5 space-y-3">
+                <div className="relative">
+                  <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-charcoal-muted" />
+                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="이메일" className="w-full rounded-xl border border-birch-200 bg-white py-3 pl-10 pr-4 text-sm focus:border-birch-400 focus:outline-none focus:ring-2 focus:ring-birch-200" />
+                </div>
+                <div className="relative">
+                  <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-charcoal-muted" />
+                  <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} placeholder="비밀번호 (6자 이상)" className="w-full rounded-xl border border-birch-200 bg-white py-3 pl-10 pr-4 text-sm focus:border-birch-400 focus:outline-none focus:ring-2 focus:ring-birch-200" />
+                </div>
+                {authError && <div className="rounded-xl bg-red-50 px-4 py-2.5 text-sm text-red-700">{authError}</div>}
+                <button type="submit" disabled={authLoading} className="flex w-full items-center justify-center gap-2 rounded-full bg-charcoal py-3 text-sm font-medium text-ivory transition-all hover:bg-charcoal-light disabled:opacity-50">
+                  {authLoading ? <Loader2 size={16} className="animate-spin" /> : mode === "login" ? "로그인" : "가입하기"}
+                </button>
+              </form>
+            )}
+
+            {mode === "guest" && (
+              <p className="mt-4 text-sm text-charcoal-muted">
+                비회원으로 구매하실 수 있습니다. 아래에 배송 정보를 입력해주세요.
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="mt-8 rounded-3xl border border-birch-200 bg-white p-6 sm:p-8">
+          <h3 className="text-sm font-semibold text-charcoal">주문 상품</h3>
+          <div className="mt-4 space-y-3">
+            {items.map((item) => (
+              <div key={item.id} className="flex items-center justify-between border-b border-birch-100 pb-3 last:border-0">
+                <div>
+                  <p className="text-sm font-medium text-charcoal">{item.product_name} × {item.quantity}</p>
+                  {(item.width > 0 || item.depth > 0 || item.height > 0) && (
+                    <p className="mt-0.5 text-xs text-charcoal-muted">{item.width} × {item.depth} × {item.height}mm</p>
+                  )}
+                </div>
+                <p className="text-sm font-bold text-charcoal">{formatWon(item.unit_price * item.quantity)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-6 rounded-3xl border border-birch-200 bg-white p-6 sm:p-8 space-y-4">
+          <h3 className="text-sm font-semibold text-charcoal">배송 정보</h3>
+          <Field label="주문자 이름">
+            <input type="text" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} placeholder="이름" className="input-field" />
+          </Field>
+          <Field label="연락처">
+            <input type="tel" value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} placeholder="010-0000-0000" className="input-field" />
+          </Field>
+          <Field label="우편번호" optional>
+            <input type="text" value={customer.postcode} onChange={(e) => setCustomer({ ...customer, postcode: e.target.value })} placeholder="예: 06236" className="input-field" />
+          </Field>
+          <Field label="배송 주소">
+            <input type="text" value={customer.address} onChange={(e) => setCustomer({ ...customer, address: e.target.value })} placeholder="도로명 주소" className="input-field" />
+          </Field>
+          <Field label="상세 주소">
+            <input type="text" value={customer.detailAddress} onChange={(e) => setCustomer({ ...customer, detailAddress: e.target.value })} placeholder="동, 호수 등" className="input-field" />
+          </Field>
+          <Field label="메모" optional>
+            <textarea value={customer.memo} onChange={(e) => setCustomer({ ...customer, memo: e.target.value })} rows={3} placeholder="요청사항" className="input-field resize-none" />
+          </Field>
+        </div>
+
+        <div className="mt-6 rounded-3xl border border-birch-200 bg-white p-6">
+          <div className="flex items-end justify-between">
+            <span className="text-sm text-charcoal-muted">총 결제 금액</span>
+            <span className="font-serif text-3xl font-bold text-charcoal">{formatWon(total)}</span>
+          </div>
+        </div>
+
+        {submitError && (
+          <div className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{submitError}</div>
+        )}
+
+        <button
+          onClick={handleSubmit}
+          disabled={!isValid || submitting}
+          className="group mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-charcoal py-4 text-base font-medium text-ivory transition-all hover:bg-charcoal-light active:scale-[0.98] disabled:opacity-40"
+        >
+          {submitting ? (
+            <>
+              <Loader2 size={18} className="animate-spin" />
+              접수 중...
+            </>
+          ) : (
+            <>
+              주문 신청하기
+              <ArrowRight size={18} className="transition-transform group-hover:translate-x-0.5" />
+            </>
+          )}
+        </button>
+      </div>
+    </main>
+  );
+}
+
+function Field({ label, children, optional }: { label: string; children: React.ReactNode; optional?: boolean }) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-medium text-charcoal">
+        {label}
+        {optional && <span className="ml-1 text-xs text-charcoal-muted">(선택)</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
