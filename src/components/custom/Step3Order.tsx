@@ -1,5 +1,5 @@
-import { useState, useRef, useMemo } from "react";
-import { Check, PartyPopper, ArrowRight, Loader2, AlertCircle, Search, X } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Check, PartyPopper, ArrowRight, Loader2, AlertCircle } from "lucide-react";
 import { StepHeader, Field } from "@/components/custom/Step1Product";
 import { calculatePrice, formatWon } from "@/lib/pricing";
 import { insertOrder } from "@/lib/api";
@@ -26,29 +26,6 @@ interface CustomerInfo {
   memo: string;
 }
 
-interface DaumPostcodeData {
-  zonecode: string;
-  roadAddress: string;
-  jibunAddress: string;
-  userSelectedType: string;
-  bname: string;
-  buildingName: string;
-  apartment: string;
-}
-
-declare global {
-  interface Window {
-    daum?: {
-      Postcode: new (options: {
-        oncomplete: (data: DaumPostcodeData) => void;
-        onclose?: (state: string) => void;
-        width?: number | string;
-        height?: number;
-      }) => { open: () => void; embed: (el: HTMLElement) => void };
-    };
-  }
-}
-
 export function Step3Order({
   product,
   dimensions,
@@ -70,9 +47,6 @@ export function Step3Order({
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [postcodeLoading, setPostcodeLoading] = useState(false);
-  const [showPostcodeEmbed, setShowPostcodeEmbed] = useState(false);
-  const postcodeEmbedRef = useRef<HTMLDivElement>(null);
 
   const breakdown = calculatePrice({ product, dimensions, pricing }, sizes);
 
@@ -106,71 +80,6 @@ export function Step3Order({
   };
 
   const isValid = customer.name.trim() && customer.phone.trim() && customer.address.trim();
-
-  const handlePostcodeSearch = () => {
-    setSubmitError(null);
-    if (window.daum?.Postcode) {
-      openPostcodeEmbed();
-    } else {
-      setPostcodeLoading(true);
-      const script = document.createElement("script");
-      script.src = "https://t1.daumcdn.net/mapjsapi/bind/postcode/prod/postcode.v2.js";
-      script.onload = () => {
-        setPostcodeLoading(false);
-        openPostcodeEmbed();
-      };
-      script.onerror = () => {
-        setPostcodeLoading(false);
-        setSubmitError("주소 검색 서비스를 불러오지 못했습니다. 아래 주소란에 직접 입력해주세요.");
-      };
-      document.body.appendChild(script);
-    }
-  };
-
-  const openPostcodeEmbed = () => {
-    if (!window.daum?.Postcode) {
-      setSubmitError("주소 검색 서비스를 불러오지 못했습니다. 아래 주소란에 직접 입력해주세요.");
-      return;
-    }
-    setShowPostcodeEmbed(true);
-    setSubmitError(null);
-    setTimeout(() => {
-      if (!postcodeEmbedRef.current || !window.daum?.Postcode) return;
-      const postcode = new window.daum.Postcode({
-        width: "100%",
-        height: 400,
-        oncomplete: (data: DaumPostcodeData) => {
-          const roadAddr = data.roadAddress;
-          const extraAddr = buildExtraAddress(data);
-          setCustomer((prev) => ({
-            ...prev,
-            postcode: data.zonecode,
-            address: roadAddr + extraAddr,
-            detailAddress: "",
-          }));
-          setShowPostcodeEmbed(false);
-          setTimeout(() => {
-            const el = document.getElementById("detail-address-input");
-            if (el) el.focus();
-          }, 100);
-        },
-      });
-      postcode.embed(postcodeEmbedRef.current);
-    }, 50);
-  };
-
-  const buildExtraAddress = (data: DaumPostcodeData): string => {
-    if (data.userSelectedType !== "R") return "";
-    let extraAddr = "";
-    if (data.bname && /[동|로|가]$/g.test(data.bname)) {
-      extraAddr += ` (${data.bname}`;
-    }
-    if (data.buildingName && data.apartment === "Y") {
-      extraAddr += extraAddr ? `, ${data.buildingName}` : ` (${data.buildingName}`;
-    }
-    if (extraAddr) extraAddr += ")";
-    return extraAddr;
-  };
 
   const handleSubmit = async () => {
     if (!isValid || submitting) return;
@@ -275,51 +184,23 @@ export function Step3Order({
               className="input-field"
             />
           </Field>
+          <Field label="우편번호" optional>
+            <input
+              type="text"
+              value={customer.postcode}
+              onChange={(e) => update("postcode", e.target.value)}
+              placeholder="예: 06236"
+              className="input-field"
+            />
+          </Field>
           <Field label="배송 주소">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-              <input
-                type="text"
-                value={customer.postcode}
-                onChange={(e) => update("postcode", e.target.value)}
-                placeholder="우편번호"
-                className="input-field w-full sm:w-32 shrink-0"
-              />
-              <button
-                type="button"
-                onClick={handlePostcodeSearch}
-                disabled={postcodeLoading}
-                className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl border border-birch-300 bg-white px-4 py-3 text-sm font-medium text-charcoal transition-colors hover:bg-birch-50 disabled:opacity-50 sm:py-[14px]"
-              >
-                {postcodeLoading ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <Search size={16} />
-                )}
-                주소 검색
-              </button>
-            </div>
             <input
               type="text"
               value={customer.address}
               onChange={(e) => update("address", e.target.value)}
-              placeholder="도로명 주소를 입력하거나 검색해주세요."
-              className="input-field mt-2"
+              placeholder="도로명 주소를 입력해주세요."
+              className="input-field"
             />
-            {showPostcodeEmbed && (
-              <div className="mt-2 overflow-hidden rounded-xl border border-birch-200 bg-white p-2">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-medium text-charcoal-muted">주소 검색</span>
-                  <button
-                    type="button"
-                    onClick={() => setShowPostcodeEmbed(false)}
-                    className="text-charcoal-muted hover:text-charcoal"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-                <div ref={postcodeEmbedRef} />
-              </div>
-            )}
           </Field>
 
           <Field label="상세 주소">
