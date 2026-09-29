@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo } from "react";
-import { Check, PartyPopper, ArrowRight, Loader2, AlertCircle, Search } from "lucide-react";
+import { Check, PartyPopper, ArrowRight, Loader2, AlertCircle, Search, X } from "lucide-react";
 import { StepHeader, Field } from "@/components/custom/Step1Product";
 import { calculatePrice, formatWon } from "@/lib/pricing";
 import { insertOrder } from "@/lib/api";
@@ -20,7 +20,6 @@ interface Step3Props {
 interface CustomerInfo {
   name: string;
   phone: string;
-  email: string;
   postcode: string;
   address: string;
   detailAddress: string;
@@ -45,7 +44,7 @@ declare global {
         onclose?: (state: string) => void;
         width?: number | string;
         height?: number;
-      }) => { open: () => void };
+      }) => { open: () => void; embed: (el: HTMLElement) => void };
     };
   }
 }
@@ -62,7 +61,6 @@ export function Step3Order({
   const [customer, setCustomer] = useState<CustomerInfo>({
     name: "",
     phone: "",
-    email: "",
     postcode: "",
     address: "",
     detailAddress: "",
@@ -73,7 +71,8 @@ export function Step3Order({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [postcodeLoading, setPostcodeLoading] = useState(false);
-  const postcodeRef = useRef<HTMLDivElement>(null);
+  const [showPostcodeEmbed, setShowPostcodeEmbed] = useState(false);
+  const postcodeEmbedRef = useRef<HTMLDivElement>(null);
 
   const breakdown = calculatePrice({ product, dimensions, pricing }, sizes);
 
@@ -109,45 +108,55 @@ export function Step3Order({
   const isValid = customer.name.trim() && customer.phone.trim() && customer.address.trim();
 
   const handlePostcodeSearch = () => {
-    if (!window.daum?.Postcode) {
+    setSubmitError(null);
+    if (window.daum?.Postcode) {
+      openPostcodeEmbed();
+    } else {
       setPostcodeLoading(true);
       const script = document.createElement("script");
       script.src = "https://t1.daumcdn.net/mapjsapi/bind/postcode/prod/postcode.v2.js";
       script.onload = () => {
         setPostcodeLoading(false);
-        openPostcodePopup();
+        openPostcodeEmbed();
       };
       script.onerror = () => {
         setPostcodeLoading(false);
-        setSubmitError("주소 검색 서비스를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
+        setSubmitError("주소 검색 서비스를 불러오지 못했습니다. 아래 주소란에 직접 입력해주세요.");
       };
       document.body.appendChild(script);
-    } else {
-      openPostcodePopup();
     }
   };
 
-  const openPostcodePopup = () => {
-    if (!window.daum?.Postcode) return;
-    const postcode = new window.daum.Postcode({
-      width: 500,
-      height: 500,
-      oncomplete: (data: DaumPostcodeData) => {
-        const roadAddr = data.roadAddress;
-        const extraAddr = buildExtraAddress(data);
-        setCustomer((prev) => ({
-          ...prev,
-          postcode: data.zonecode,
-          address: roadAddr + extraAddr,
-          detailAddress: "",
-        }));
-        setTimeout(() => {
-          const el = document.getElementById("detail-address-input");
-          if (el) el.focus();
-        }, 100);
-      },
-    });
-    postcode.open();
+  const openPostcodeEmbed = () => {
+    if (!window.daum?.Postcode) {
+      setSubmitError("주소 검색 서비스를 불러오지 못했습니다. 아래 주소란에 직접 입력해주세요.");
+      return;
+    }
+    setShowPostcodeEmbed(true);
+    setSubmitError(null);
+    setTimeout(() => {
+      if (!postcodeEmbedRef.current || !window.daum?.Postcode) return;
+      const postcode = new window.daum.Postcode({
+        width: "100%",
+        height: 400,
+        oncomplete: (data: DaumPostcodeData) => {
+          const roadAddr = data.roadAddress;
+          const extraAddr = buildExtraAddress(data);
+          setCustomer((prev) => ({
+            ...prev,
+            postcode: data.zonecode,
+            address: roadAddr + extraAddr,
+            detailAddress: "",
+          }));
+          setShowPostcodeEmbed(false);
+          setTimeout(() => {
+            const el = document.getElementById("detail-address-input");
+            if (el) el.focus();
+          }, 100);
+        },
+      });
+      postcode.embed(postcodeEmbedRef.current);
+    }, 50);
   };
 
   const buildExtraAddress = (data: DaumPostcodeData): string => {
@@ -177,7 +186,7 @@ export function Step3Order({
         total_price: grandTotal,
         customer_name: customer.name.trim(),
         customer_phone: customer.phone.trim(),
-        customer_email: customer.email.trim() || null,
+        customer_email: null,
         customer_postcode: customer.postcode.trim() || null,
         customer_address: customer.address.trim(),
         customer_detail_address: customer.detailAddress.trim() || null,
@@ -266,24 +275,14 @@ export function Step3Order({
               className="input-field"
             />
           </Field>
-          <Field label="이메일" optional>
-            <input
-              type="email"
-              value={customer.email}
-              onChange={(e) => update("email", e.target.value)}
-              placeholder="email@example.com"
-              className="input-field"
-            />
-          </Field>
-
           <Field label="배송 주소">
-            <div ref={postcodeRef} className="flex flex-col gap-2 sm:flex-row sm:items-start">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
               <input
                 type="text"
                 value={customer.postcode}
-                readOnly
+                onChange={(e) => update("postcode", e.target.value)}
                 placeholder="우편번호"
-                className="input-field w-full sm:w-32 shrink-0 cursor-default bg-birch-50"
+                className="input-field w-full sm:w-32 shrink-0"
               />
               <button
                 type="button"
@@ -302,10 +301,25 @@ export function Step3Order({
             <input
               type="text"
               value={customer.address}
-              readOnly
-              placeholder="도로명 주소를 검색해주세요."
-              className="input-field mt-2 cursor-default bg-birch-50"
+              onChange={(e) => update("address", e.target.value)}
+              placeholder="도로명 주소를 입력하거나 검색해주세요."
+              className="input-field mt-2"
             />
+            {showPostcodeEmbed && (
+              <div className="mt-2 overflow-hidden rounded-xl border border-birch-200 bg-white p-2">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs font-medium text-charcoal-muted">주소 검색</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowPostcodeEmbed(false)}
+                    className="text-charcoal-muted hover:text-charcoal"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <div ref={postcodeEmbedRef} />
+              </div>
+            )}
           </Field>
 
           <Field label="상세 주소">

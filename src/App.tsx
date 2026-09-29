@@ -29,11 +29,11 @@ function AppRoutes() {
   }
 
   if (isAdmin && session) {
-    return <AdminDashboard onNavigate={navigate} />;
+    return <AdminDashboard onNavigate={navigate} path={path} />;
   }
 
   if (isAdminLogin && session) {
-    return <AdminDashboard onNavigate={navigate} />;
+    return <AdminDashboard onNavigate={navigate} path={path} />;
   }
 
   // /custom/product/:id → product detail page

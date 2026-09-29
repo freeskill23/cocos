@@ -11,13 +11,21 @@ import { SettingsTab } from "@/components/admin/SettingsTab";
 
 type TabId = "dashboard" | "orders" | "products" | "portfolio" | "reviews" | "settings";
 
-interface AdminDashboardProps {
-  onNavigate: (to: string) => void;
+function tabFromPath(path: string): TabId {
+  const match = path.match(/^\/admin\/?(\w*)/);
+  const segment = match?.[1];
+  const valid: TabId[] = ["dashboard", "orders", "products", "portfolio", "reviews", "settings"];
+  return (valid.includes(segment as TabId) ? segment : "dashboard") as TabId;
 }
 
-export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
+interface AdminDashboardProps {
+  onNavigate: (to: string) => void;
+  path: string;
+}
+
+export function AdminDashboard({ onNavigate, path }: AdminDashboardProps) {
   const { signOut, session } = useAuth();
-  const [tab, setTab] = useState<TabId>("dashboard");
+  const [tab, setTab] = useState<TabId>(() => tabFromPath(path));
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [orderCount, setOrderCount] = useState<number | null>(null);
 
@@ -38,7 +46,12 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
   const handleTabChange = useCallback((id: TabId) => {
     setTab(id);
     setSidebarOpen(false);
-  }, []);
+    onNavigate(id === "dashboard" ? "/admin" : `/admin/${id}`);
+  }, [onNavigate]);
+
+  useEffect(() => {
+    setTab(tabFromPath(path));
+  }, [path]);
 
   return (
     <div className="min-h-screen bg-birch-50">
