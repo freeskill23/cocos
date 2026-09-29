@@ -28,9 +28,9 @@ export async function requestCardPayment(
     payMethod: "CARD",
     productType: "REAL",
     customer: {
-      fullName: params.customerName,
-      phoneNumber: params.customerPhone || undefined,
-      email: params.customerEmail || undefined,
+      fullName: params.customerName.trim() || undefined,
+      phoneNumber: params.customerPhone.trim() || undefined,
+      email: params.customerEmail?.trim() || undefined,
     },
     redirectUrl: params.redirectUrl,
   });

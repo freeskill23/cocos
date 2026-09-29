@@ -47,7 +47,11 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
   }, []);
 
   const total = items.reduce((sum, i) => sum + i.unit_price * i.quantity, 0);
-  const isValid = customer.name.trim() && customer.phone.trim() && customer.address.trim();
+  const phonePattern = /^010-\d{3,4}-\d{4}$/;
+  const phoneError = customer.phone && !phonePattern.test(customer.phone)
+    ? "올바른 전화번호 형식이 아닙니다 (예: 010-0000-0000)"
+    : null;
+  const isValid = customer.name.trim() && phonePattern.test(customer.phone.trim()) && customer.address.trim();
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -317,7 +321,29 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
             <input type="text" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} placeholder="이름" className="input-field" />
           </Field>
           <Field label="연락처">
-            <input type="tel" value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} placeholder="010-0000-0000" className="input-field" />
+            <input
+              type="tel"
+              value={customer.phone}
+              onChange={(e) => {
+                const raw = e.target.value.replace(/[^\d-]/g, "");
+                let formatted = raw;
+                const digits = raw.replace(/-/g, "");
+                if (digits.length <= 3) {
+                  formatted = digits;
+                } else if (digits.length <= 7) {
+                  formatted = `${digits.slice(0, 3)}-${digits.slice(3)}`;
+                } else {
+                  formatted = `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
+                }
+                setCustomer({ ...customer, phone: formatted });
+              }}
+              placeholder="010-0000-0000"
+              maxLength={13}
+              className="input-field"
+            />
+            {phoneError && (
+              <p className="mt-1.5 text-xs text-red-600">{phoneError}</p>
+            )}
           </Field>
           <Field label="우편번호" optional>
             <input type="text" value={customer.postcode} onChange={(e) => setCustomer({ ...customer, postcode: e.target.value })} placeholder="예: 06236" className="input-field" />
