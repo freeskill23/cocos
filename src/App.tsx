@@ -8,6 +8,7 @@ import { CustomPage } from "@/pages/CustomPage";
 import { ProductDetailPage } from "@/pages/ProductDetailPage";
 import { PaymentPage } from "@/pages/PaymentPage";
 import { AuthPage } from "@/pages/AuthPage";
+import { AccountPage } from "@/pages/AccountPage";
 import { CartPage } from "@/pages/CartPage";
 import { CheckoutPage } from "@/pages/CheckoutPage";
 import { AdminLogin } from "@/pages/AdminLogin";
@@ -70,6 +71,8 @@ function AppRoutes() {
       <Navbar onNavigate={navigate} currentPath={path} />
       {path === "/auth" ? (
         <AuthPage onNavigate={navigate} />
+      ) : path === "/account" ? (
+        <AccountPage onNavigate={navigate} />
       ) : path === "/cart" ? (
         <CartPage onNavigate={navigate} />
       ) : path === "/checkout" ? (

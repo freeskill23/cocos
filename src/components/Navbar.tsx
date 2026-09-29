@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Menu, X, ShoppingBag, User } from "lucide-react";
+import { Menu, X, ShoppingBag, User, LogOut, Settings } from "lucide-react";
 import { BRAND } from "@/config/brand";
 import { useCart } from "@/hooks/useCart";
 import { useAuth } from "@/hooks/useAuth";
@@ -16,7 +16,7 @@ export function Navbar({ onNavigate, currentPath }: NavbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const { count } = useCart();
-  const { session } = useAuth();
+  const { session, signOut } = useAuth();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -37,6 +37,12 @@ export function Navbar({ onNavigate, currentPath }: NavbarProps) {
   const handleNavClick = (href: string) => {
     setMenuOpen(false);
     onNavigate(href);
+  };
+
+  const handleLogout = async () => {
+    setMenuOpen(false);
+    await signOut();
+    onNavigate("/");
   };
 
   const isCategoryActive = (catId: string) => currentPath === `/category/${catId}`;
@@ -145,12 +151,34 @@ export function Navbar({ onNavigate, currentPath }: NavbarProps) {
             >
               장바구니 {count > 0 && `(${count})`}
             </button>
-            <button
-              onClick={() => handleNavClick(session ? "/account" : "/auth")}
-              className="rounded-xl px-4 py-3.5 text-left text-base font-medium text-charcoal transition-colors hover:bg-birch-100"
-            >
-              {session ? "내 계정" : "로그인 / 회원가입"}
-            </button>
+            {session ? (
+              <>
+                <div className="px-4 py-2 text-xs text-charcoal-muted">
+                  {session.user.email}
+                </div>
+                <button
+                  onClick={() => handleNavClick("/account")}
+                  className="flex items-center gap-2 rounded-xl px-4 py-3.5 text-left text-base font-medium text-charcoal transition-colors hover:bg-birch-100"
+                >
+                  <Settings size={18} />
+                  내 정보 관리
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 rounded-xl px-4 py-3.5 text-left text-base font-medium text-charcoal transition-colors hover:bg-birch-100"
+                >
+                  <LogOut size={18} />
+                  로그아웃
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => handleNavClick("/auth")}
+                className="rounded-xl px-4 py-3.5 text-left text-base font-medium text-charcoal transition-colors hover:bg-birch-100"
+              >
+                로그인 / 회원가입
+              </button>
+            )}
           </div>
         </div>
       )}
