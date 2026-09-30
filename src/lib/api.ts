@@ -133,6 +133,9 @@ export interface ProductUpsertData {
   display_order: number;
   is_active: boolean;
   size_customizable: boolean;
+  customizable_width: boolean;
+  customizable_depth: boolean;
+  customizable_height: boolean;
   options: ProductRow["options"];
   category_ids?: string[];
 }

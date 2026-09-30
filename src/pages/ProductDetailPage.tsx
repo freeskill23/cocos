@@ -200,12 +200,18 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
                         />
                       </div>
                       <div className="space-y-3">
-                        <SizeSlider label="가로" value={dimensions.width} min={sizes.minWidth} max={sizes.maxWidth}
-                          onChange={(v) => setDimensions({ ...dimensions, width: v })} />
-                        <SizeSlider label="세로" value={dimensions.depth} min={sizes.minDepth} max={sizes.maxDepth}
-                          onChange={(v) => setDimensions({ ...dimensions, depth: v })} />
-                        <SizeSlider label="높이" value={dimensions.height} min={sizes.minHeight} max={sizes.maxHeight}
-                          onChange={(v) => setDimensions({ ...dimensions, height: v })} />
+                        {product.customizable_width !== false && (
+                          <SizeSlider label="가로" value={dimensions.width} min={sizes.minWidth} max={sizes.maxWidth}
+                            onChange={(v) => setDimensions({ ...dimensions, width: v })} />
+                        )}
+                        {product.customizable_depth !== false && (
+                          <SizeSlider label="세로" value={dimensions.depth} min={sizes.minDepth} max={sizes.maxDepth}
+                            onChange={(v) => setDimensions({ ...dimensions, depth: v })} />
+                        )}
+                        {product.customizable_height !== false && (
+                          <SizeSlider label="높이" value={dimensions.height} min={sizes.minHeight} max={sizes.maxHeight}
+                            onChange={(v) => setDimensions({ ...dimensions, height: v })} />
+                        )}
                       </div>
                       {breakdown && (breakdown.widthAdjust > 0 || breakdown.depthAdjust > 0 || breakdown.heightAdjust > 0) && (
                         <div className="mt-3 space-y-1 border-t border-birch-100 pt-3 text-xs text-charcoal-muted">

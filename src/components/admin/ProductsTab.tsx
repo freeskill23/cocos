@@ -164,6 +164,9 @@ function ProductEditor({
   const [active, setActive] = useState(item?.is_active ?? true);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(item?.category_ids ?? []);
   const [sizeCustomizable, setSizeCustomizable] = useState(item?.size_customizable ?? true);
+  const [customizableWidth, setCustomizableWidth] = useState(item?.customizable_width ?? true);
+  const [customizableDepth, setCustomizableDepth] = useState(item?.customizable_depth ?? true);
+  const [customizableHeight, setCustomizableHeight] = useState(item?.customizable_height ?? true);
   const [options, setOptions] = useState<ProductOption[]>(
     (item?.options ?? []).map((o) => ({
       ...o,
@@ -197,6 +200,9 @@ function ProductEditor({
         is_active: active,
         category_ids: selectedCategoryIds,
         size_customizable: sizeCustomizable,
+        customizable_width: customizableWidth,
+        customizable_depth: customizableDepth,
+        customizable_height: customizableHeight,
         options,
       });
       onSaved();
@@ -279,6 +285,16 @@ function ProductEditor({
             >
               {sizeCustomizable ? "사이즈 변경 가능" : "사이즈 변경 불필요 (고정 사이즈)"}
             </button>
+            {sizeCustomizable && (
+              <div className="mt-3 space-y-2">
+                <p className="text-xs text-charcoal-muted">조절 가능한 축 선택 (복수 선택 가능)</p>
+                <div className="flex flex-wrap gap-2">
+                  <AxisToggle label="가로" active={customizableWidth} onClick={() => setCustomizableWidth(!customizableWidth)} />
+                  <AxisToggle label="세로" active={customizableDepth} onClick={() => setCustomizableDepth(!customizableDepth)} />
+                  <AxisToggle label="높이" active={customizableHeight} onClick={() => setCustomizableHeight(!customizableHeight)} />
+                </div>
+              </div>
+            )}
           </FormField>
 
           <FormField label="상세 페이지 구성">
@@ -471,5 +487,19 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
       <label className="mb-2 block text-sm font-medium text-charcoal">{label}</label>
       {children}
     </div>
+  );
+}
+
+function AxisToggle({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg border-2 px-3 py-2 text-xs font-medium transition-all ${
+        active ? "border-charcoal bg-charcoal text-ivory" : "border-birch-200 bg-white text-charcoal hover:border-birch-400"
+      }`}
+    >
+      {label} 조절 {active ? "가능" : "불가"}
+    </button>
   );
 }

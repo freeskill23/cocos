@@ -47,6 +47,9 @@ export interface ProductRow {
   display_order: number;
   category_ids: string[];
   size_customizable: boolean;
+  customizable_width: boolean;
+  customizable_depth: boolean;
+  customizable_height: boolean;
   created_at: string;
   updated_at: string;
 }
