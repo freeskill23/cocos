@@ -3,6 +3,7 @@ import { Check, PartyPopper, ArrowRight, Loader2, AlertCircle } from "lucide-rea
 import { StepHeader, Field } from "@/components/custom/Step1Product";
 import { calculatePrice, formatWon } from "@/lib/pricing";
 import { insertOrder } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import { BRAND } from "@/config/brand";
 import type { PricingSettings, SizeSettings } from "@/config/pricing";
 import type { ProductRow, ProductOption, SelectedOption } from "@/types/database";
@@ -47,6 +48,7 @@ export function Step3Order({
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [orderNumber, setOrderNumber] = useState<string | null>(null);
 
   const breakdown = calculatePrice({ product, dimensions, pricing }, sizes);
 
@@ -86,7 +88,7 @@ export function Step3Order({
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await insertOrder({
+      const insertedId = await insertOrder({
         product_id: product.id,
         product_name: product.name,
         width: dimensions.width,
@@ -102,6 +104,10 @@ export function Step3Order({
         selected_options: selectedOptions,
         memo: customer.memo.trim() || null,
       });
+      if (insertedId) {
+        const { data: inserted } = await supabase.from("orders").select("order_number").eq("id", insertedId).single();
+        if (inserted?.order_number) setOrderNumber(inserted.order_number);
+      }
       setSubmitted(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
@@ -123,6 +129,14 @@ export function Step3Order({
           <br />
           입력하신 정보를 확인 후 1영업일 이내에 연락드리겠습니다.
         </p>
+
+        {orderNumber && (
+          <div className="mt-6 inline-flex flex-col items-center gap-1 rounded-2xl bg-birch-50 px-6 py-4">
+            <p className="text-xs text-charcoal-muted">주문번호</p>
+            <p className="font-mono text-lg font-bold text-charcoal">{orderNumber}</p>
+            <p className="mt-1 text-[11px] text-charcoal-muted">주문번호를 메모해두시면 주문 조회 시 사용할 수 있습니다.</p>
+          </div>
+        )}
 
         <div className="mt-10 w-full max-w-md rounded-3xl border border-birch-200 bg-white p-6 text-left">
           <h3 className="text-sm font-semibold text-charcoal">주문 요약</h3>

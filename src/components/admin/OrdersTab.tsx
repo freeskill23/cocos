@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { Trash2, ChevronDown, ChevronUp, Loader2, RefreshCw, Link2, Copy, Check, Printer, Save } from "lucide-react";
-import { fetchAllOrders, updateOrderStatus, updateOrderMemo, deleteOrder, generatePaymentToken } from "@/lib/api";
+import { fetchAllOrders, updateOrderStatus, updateOrderMemo, deleteOrder, bulkDeleteOrders, generatePaymentToken } from "@/lib/api";
 import type { OrderRow } from "@/types/database";
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, type OrderStatus } from "@/lib/supabase";
 import { formatWon } from "@/lib/pricing";
@@ -16,6 +16,8 @@ export function OrdersTab({ onCountChange }: OrdersTabProps) {
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<OrderStatus | "all">("all");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,6 +51,7 @@ export function OrdersTab({ onCountChange }: OrdersTabProps) {
     try {
       await deleteOrder(id);
       setOrders((prev) => prev.filter((o) => o.id !== id));
+      setSelectedIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
     } catch (err) {
       setError(err instanceof Error ? err.message : "삭제에 실패했습니다.");
     }
@@ -73,6 +76,55 @@ export function OrdersTab({ onCountChange }: OrdersTabProps) {
   };
 
   const filteredOrders = filter === "all" ? orders : orders.filter((o) => o.status === filter);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredOrders.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredOrders.map((o) => o.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`선택된 ${selectedIds.size}개 주문을 정말 삭제하시겠습니까?`)) return;
+    setBulkDeleting(true);
+    try {
+      await bulkDeleteOrders(Array.from(selectedIds));
+      setOrders((prev) => prev.filter((o) => !selectedIds.has(o.id)));
+      setSelectedIds(new Set());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "일괄 삭제에 실패했습니다.");
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    if (orders.length === 0) return;
+    if (!confirm(`전체 ${orders.length}개 주문을 정말 전부 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+    if (!confirm("정말 확실합니까? 모든 주문 데이터가 영구 삭제됩니다.")) return;
+    setBulkDeleting(true);
+    try {
+      await bulkDeleteOrders(orders.map((o) => o.id));
+      setOrders([]);
+      setSelectedIds(new Set());
+      onCountChange(0);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "전체 삭제에 실패했습니다.");
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
 
   return (
     <div>
@@ -105,6 +157,38 @@ export function OrdersTab({ onCountChange }: OrdersTabProps) {
         })}
       </div>
 
+      {!loading && filteredOrders.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-xs font-medium text-charcoal-muted">
+            <input
+              type="checkbox"
+              checked={selectedIds.size === filteredOrders.length && filteredOrders.length > 0}
+              onChange={toggleSelectAll}
+              className="h-4 w-4 accent-birch-600"
+            />
+            전체 선택
+          </label>
+          {selectedIds.size > 0 && (
+            <button
+              onClick={handleBulkDelete}
+              disabled={bulkDeleting}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50"
+            >
+              {bulkDeleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+              선택 삭제 ({selectedIds.size})
+            </button>
+          )}
+          <button
+            onClick={handleDeleteAll}
+            disabled={bulkDeleting || orders.length === 0}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+          >
+            <Trash2 size={13} />
+            전체 삭제
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="mt-16 flex justify-center">
           <Loader2 size={28} className="animate-spin text-birch-400" />
@@ -118,7 +202,9 @@ export function OrdersTab({ onCountChange }: OrdersTabProps) {
               key={order.id}
               order={order}
               expanded={expandedId === order.id}
+              selected={selectedIds.has(order.id)}
               onToggle={() => setExpandedId(expandedId === order.id ? null : order.id)}
+              onSelect={() => toggleSelect(order.id)}
               onStatusChange={handleStatusChange}
               onDelete={handleDelete}
               onMemoSave={handleMemoSave}
@@ -155,7 +241,9 @@ function FilterButton({
 function OrderCard({
   order,
   expanded,
+  selected,
   onToggle,
+  onSelect,
   onStatusChange,
   onDelete,
   onMemoSave,
@@ -163,7 +251,9 @@ function OrderCard({
 }: {
   order: OrderRow;
   expanded: boolean;
+  selected: boolean;
   onToggle: () => void;
+  onSelect: () => void;
   onStatusChange: (id: string, status: OrderStatus) => void;
   onDelete: (id: string) => void;
   onMemoSave: (id: string, memo: string) => void;
@@ -216,7 +306,7 @@ function OrderCard({
       @media print { body { padding: 20px; } .no-print { display: none; } }
     </style></head><body>
     <h1>${BRAND.nameKr} 주문서</h1>
-    <p class="subtitle">주문번호: ${order.id.slice(0, 8)} · ${created.toLocaleDateString("ko-KR")} ${created.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</p>
+    <p class="subtitle">주문번호: ${order.order_number ?? order.id.slice(0, 8)} · ${created.toLocaleDateString("ko-KR")} ${created.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</p>
     <div class="section">
       <div class="section-title">제작 정보</div>
       <table>
@@ -251,26 +341,41 @@ function OrderCard({
   const canGenerateLink = status === "received";
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-birch-200 bg-white">
-      <button onClick={onToggle} className="flex w-full items-center justify-between p-5 text-left">
-        <div className="flex items-center gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-charcoal">{order.customer_name}</span>
-              <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-medium ${ORDER_STATUS_COLORS[status]}`}>
-                {ORDER_STATUS_LABELS[status]}
-              </span>
+    <div className={`overflow-hidden rounded-2xl border bg-white transition-colors ${selected ? "border-birch-400 ring-1 ring-birch-300" : "border-birch-200"}`}>
+      <div className="flex items-center">
+        <button
+          onClick={onSelect}
+          className="flex h-full items-center px-4"
+          aria-label="주문 선택"
+        >
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onSelect}
+            className="h-4 w-4 accent-birch-600"
+          />
+        </button>
+        <button onClick={onToggle} className="flex flex-1 items-center justify-between p-5 text-left">
+          <div className="flex items-center gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-charcoal">{order.customer_name}</span>
+                <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-medium ${ORDER_STATUS_COLORS[status]}`}>
+                  {ORDER_STATUS_LABELS[status]}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-charcoal-muted">
+                {order.product_name || "-"} · {order.width}×{order.depth}×{order.height}mm · {formatWon(order.total_price)}
+              </p>
+              <p className="mt-0.5 text-[10px] text-charcoal-muted">
+                {order.order_number && <span className="font-mono text-charcoal">{order.order_number} · </span>}
+                {created.toLocaleDateString("ko-KR")} {created.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
+              </p>
             </div>
-            <p className="mt-1 text-xs text-charcoal-muted">
-              {order.product_name || "-"} · {order.width}×{order.depth}×{order.height}mm · {formatWon(order.total_price)}
-            </p>
-            <p className="mt-0.5 text-[10px] text-charcoal-muted">
-              {created.toLocaleDateString("ko-KR")} {created.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
-            </p>
           </div>
-        </div>
-        {expanded ? <ChevronUp size={18} className="text-charcoal-muted" /> : <ChevronDown size={18} className="text-charcoal-muted" />}
-      </button>
+          {expanded ? <ChevronUp size={18} className="text-charcoal-muted" /> : <ChevronDown size={18} className="text-charcoal-muted" />}
+        </button>
+      </div>
 
       {expanded && (
         <div className="border-t border-birch-200 p-5">
@@ -278,6 +383,7 @@ function OrderCard({
             <div>
               <h4 className="text-xs font-semibold text-charcoal-muted">제작 정보</h4>
               <div className="mt-2 space-y-1.5 text-sm">
+                <DetailRow label="주문번호" value={order.order_number ?? "-"} />
                 <DetailRow label="상품" value={order.product_name || "-"} />
                 <DetailRow label="사이즈" value={`${order.width} × ${order.depth} × ${order.height}mm`} />
                 {(order.selected_options ?? []).map((s, i) => (

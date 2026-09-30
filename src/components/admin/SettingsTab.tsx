@@ -176,30 +176,39 @@ export function SettingsTab() {
 
       <div className="mt-6 rounded-3xl border border-birch-200 bg-white p-6">
         <h2 className="text-base font-semibold text-charcoal">포트원(PortOne) 카드결제 설정</h2>
-        <p className="mt-1 text-xs text-charcoal-muted">포트원 V2 Store ID와 Channel Key를 입력하면 카드 결제가 활성화됩니다. 포트원 관리자 콘솔에서 확인할 수 있습니다.</p>
+        <p className="mt-1 text-xs text-charcoal-muted">포트원 V2 Store ID와 Channel Key를 입력하면 카드 결제가 활성화됩니다.</p>
         <div className="mt-6 space-y-4">
           <div>
-            <label className="mb-2 block text-sm font-medium text-charcoal">Store ID</label>
+            <label className="mb-2 block text-sm font-medium text-charcoal">Store ID (포트원 상점 아이디)</label>
             <input
               type="text"
               value={portone.storeId}
               onChange={(e) => setPortone({ ...portone, storeId: e.target.value })}
-              placeholder="예: store-abc12345-xxxx-xxxx"
+              placeholder="store-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
               className="input-field"
             />
+            <p className="mt-1.5 text-xs text-charcoal-muted">
+              포트원 관리자 콘솔(admin.portone.io) &gt; 내 상점에서 확인. PG사의 MID가 아닙니다.
+            </p>
           </div>
           <div>
-            <label className="mb-2 block text-sm font-medium text-charcoal">Channel Key</label>
+            <label className="mb-2 block text-sm font-medium text-charcoal">Channel Key (채널 키)</label>
             <input
               type="text"
               value={portone.channelKey}
               onChange={(e) => setPortone({ ...portone, channelKey: e.target.value })}
-              placeholder="예: channel-key-abc123..."
+              placeholder="channel-key-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
               className="input-field"
             />
+            <p className="mt-1.5 text-xs text-charcoal-muted">
+              포트원 콘솔 &gt; 연동 관리 &gt; 연동 정보 &gt; 채널 관리에서 확인.
+            </p>
+          </div>
+          <div className="rounded-xl bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-800">
+            <p className="font-medium">주의: Store ID와 MID는 다른 값입니다</p>
+            <p className="mt-1">MID(예: IPC8B)는 PG사(NHN KCP, KG이니시스 등)에서 발급받은 상점아이디이며, 포트원 콘솔에서 채널 설정 시 입력하는 값입니다. 결제 호출에 사용하는 Store ID는 포트원에서 발급하는 별도의 값입니다.</p>
           </div>
           <div className="rounded-xl bg-birch-50 px-4 py-3 text-xs leading-relaxed text-charcoal-muted">
-            포트원 가입: portone.io에서 가입 후 관리자 콘솔 &gt; 결제 채널에서 Store ID와 Channel Key를 확인하세요.
             카드 결제를 사용하지 않으려면 두 필드를 비워두세요. 무통장입금만 유지됩니다.
           </div>
         </div>

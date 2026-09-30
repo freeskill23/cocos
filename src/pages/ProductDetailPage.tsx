@@ -84,6 +84,7 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
     + (breakdown?.widthAdjust ?? 0)
     + (breakdown?.depthAdjust ?? 0)
     + (breakdown?.heightAdjust ?? 0)
+    + (breakdown?.shippingFee ?? 0)
     + optionsTotal;
 
   const handleAddToCart = async () => {
@@ -329,8 +330,13 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
                     </div>
                     {(breakdown?.shippingFee ?? 0) > 0 && (
                       <div className="mt-1.5 flex items-center justify-between text-[11px] text-charcoal-muted">
-                        <span>+ 배송비 {formatWon(breakdown?.shippingFee ?? 0)}</span>
-                        <span className="ml-auto">(주문 시 추가)</span>
+                        <span>배송비 포함</span>
+                        <span>{formatWon(breakdown?.shippingFee ?? 0)}</span>
+                      </div>
+                    )}
+                    {(breakdown?.shippingFee ?? 0) === 0 && (
+                      <div className="mt-1.5 flex items-center justify-between text-[11px] text-green-600">
+                        <span>배송비 무료</span>
                       </div>
                     )}
                   </div>

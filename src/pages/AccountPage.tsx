@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { LogOut, Mail, Loader2, Package, ChevronRight } from "lucide-react";
+import { LogOut, Mail, Loader2, Package, ChevronRight, XCircle, Search } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
+import { cancelOrder } from "@/lib/api";
 import { BRAND } from "@/config/brand";
+import { formatWon } from "@/lib/pricing";
 import type { OrderRow } from "@/types/database";
 
 interface AccountPageProps {
@@ -13,6 +15,7 @@ export function AccountPage({ onNavigate }: AccountPageProps) {
   const { session, signOut } = useAuth();
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!session?.user?.email) {
@@ -33,6 +36,19 @@ export function AccountPage({ onNavigate }: AccountPageProps) {
   const handleLogout = async () => {
     await signOut();
     onNavigate("/");
+  };
+
+  const handleCancel = async (id: string) => {
+    if (!confirm("정말 이 주문을 취소하시겠습니까? 제작이 시작되기 전에만 취소할 수 있습니다.")) return;
+    setCancellingId(id);
+    try {
+      await cancelOrder(id);
+      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: "cancelled" } : o)));
+    } catch {
+      alert("주문 취소에 실패했습니다. 이미 제작이 시작되었을 수 있습니다.");
+    } finally {
+      setCancellingId(null);
+    }
   };
 
   if (!session) {
@@ -59,6 +75,8 @@ export function AccountPage({ onNavigate }: AccountPageProps) {
     completed: "bg-green-100 text-green-700",
     cancelled: "bg-red-100 text-red-700",
   };
+
+  const cancellableStatuses = ["received", "payment_pending"];
 
   return (
     <main className="min-h-screen bg-ivory pt-20 md:pt-24">
@@ -90,29 +108,51 @@ export function AccountPage({ onNavigate }: AccountPageProps) {
               </div>
             ) : (
               <div className="mt-4 space-y-3">
-                {orders.map((order) => (
-                  <div
-                    key={order.id}
-                    className="flex items-center justify-between rounded-xl border border-birch-100 bg-birch-50/50 px-4 py-3"
-                  >
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-charcoal">
-                        {order.product_name ?? "상품명 없음"}
-                      </p>
-                      <p className="mt-0.5 text-xs text-charcoal-muted">
-                        {new Date(order.created_at).toLocaleDateString("ko-KR")}
-                      </p>
+                {orders.map((order) => {
+                  const canCancel = cancellableStatuses.includes(order.status);
+                  return (
+                    <div
+                      key={order.id}
+                      className="rounded-xl border border-birch-100 bg-birch-50/50 px-4 py-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-charcoal">
+                            {order.product_name ?? "상품명 없음"}
+                          </p>
+                          <p className="mt-0.5 text-xs text-charcoal-muted">
+                            {order.order_number && <span className="font-mono">{order.order_number} · </span>}
+                            {new Date(order.created_at).toLocaleDateString("ko-KR")}
+                          </p>
+                          <p className="mt-0.5 text-xs font-bold text-charcoal">{formatWon(order.total_price)}</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className={`rounded-full px-3 py-1 text-xs font-medium ${
+                            statusColors[order.status] ?? "bg-birch-100 text-charcoal"
+                          }`}>
+                            {statusLabels[order.status] ?? order.status}
+                          </span>
+                          {canCancel ? (
+                            <button
+                              onClick={() => handleCancel(order.id)}
+                              disabled={cancellingId === order.id}
+                              className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+                            >
+                              {cancellingId === order.id ? (
+                                <Loader2 size={12} className="animate-spin" />
+                              ) : (
+                                <XCircle size={12} />
+                              )}
+                              취소
+                            </button>
+                          ) : (
+                            <ChevronRight size={16} className="text-charcoal-muted" />
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className={`rounded-full px-3 py-1 text-xs font-medium ${
-                        statusColors[order.status] ?? "bg-birch-100 text-charcoal"
-                      }`}>
-                        {statusLabels[order.status] ?? order.status}
-                      </span>
-                      <ChevronRight size={16} className="text-charcoal-muted" />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

@@ -172,12 +172,20 @@ export function Navbar({ onNavigate, currentPath }: NavbarProps) {
                 </button>
               </>
             ) : (
-              <button
-                onClick={() => handleNavClick("/auth")}
-                className="rounded-xl px-4 py-3.5 text-left text-base font-medium text-charcoal transition-colors hover:bg-birch-100"
-              >
-                로그인 / 회원가입
-              </button>
+              <>
+                <button
+                  onClick={() => handleNavClick("/auth")}
+                  className="rounded-xl px-4 py-3.5 text-left text-base font-medium text-charcoal transition-colors hover:bg-birch-100"
+                >
+                  로그인 / 회원가입
+                </button>
+                <button
+                  onClick={() => handleNavClick("/guest-order")}
+                  className="rounded-xl px-4 py-3.5 text-left text-base font-medium text-charcoal-muted transition-colors hover:bg-birch-100"
+                >
+                  비회원 주문 조회
+                </button>
+              </>
             )}
           </div>
         </div>

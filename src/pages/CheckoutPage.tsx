@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { Loader2, Check, ArrowRight, User, Mail, Lock, Copy, Building2, Info, CreditCard } from "lucide-react";
+import { Loader2, Check, ArrowRight, User, Mail, Lock, Copy, Building2, Info, CreditCard, Search } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 import { useAuth } from "@/hooks/useAuth";
 import { insertOrder, fetchSettings, type OrderInsert } from "@/lib/api";
 import { formatWon } from "@/lib/pricing";
 import { BRAND } from "@/config/brand";
 import { requestCardPayment } from "@/lib/portone";
+import { supabase } from "@/lib/supabase";
 import type { BankAccount, PortOneConfig } from "@/types/database";
 
 interface CheckoutPageProps {
@@ -38,6 +39,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const [portoneConfig, setPortoneConfig] = useState<PortOneConfig | null>(null);
+  const [orderNumbers, setOrderNumbers] = useState<string[]>([]);
 
   useEffect(() => {
     fetchSettings().then((settings) => {
@@ -81,6 +83,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
         }
 
         const merchantIds: string[] = [];
+        const createdNumbers: string[] = [];
         for (const item of checkoutItems) {
           const merchantId = `order_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
           merchantIds.push(merchantId);
@@ -102,8 +105,13 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
             payment_method: "card",
             portone_merchant_id: merchantId,
           };
-          await insertOrder(order);
+          const insertedId = await insertOrder(order);
+          if (insertedId) {
+            const { data: inserted } = await supabase.from("orders").select("order_number").eq("id", insertedId).single();
+            if (inserted?.order_number) createdNumbers.push(inserted.order_number);
+          }
         }
+        setOrderNumbers(createdNumbers);
 
         const orderNames = checkoutItems.map((i) => `${i.product_name} × ${i.quantity}`).join(", ");
         const firstMerchantId = merchantIds[0];
@@ -128,6 +136,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
           setSubmitError("결제가 실패했습니다. 다시 시도해주세요.");
         }
       } else {
+        const createdNumbers: string[] = [];
         for (const item of checkoutItems) {
           const order: OrderInsert = {
             product_id: item.product_id,
@@ -146,8 +155,13 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
             memo: customer.memo.trim() || null,
             payment_method: "bank_transfer",
           };
-          await insertOrder(order);
+          const insertedId = await insertOrder(order);
+          if (insertedId) {
+            const { data: inserted } = await supabase.from("orders").select("order_number").eq("id", insertedId).single();
+            if (inserted?.order_number) createdNumbers.push(inserted.order_number);
+          }
         }
+        setOrderNumbers(createdNumbers);
         if (buyNowItem) { clearBuyNow(); } else { await clear(); }
         setSubmitted(true);
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -181,6 +195,15 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
               <br />
               아래 계좌로 입금해주시면 확인 후 제작을 시작합니다.
             </p>
+            {orderNumbers.length > 0 && (
+              <div className="mt-6 inline-flex flex-col items-center gap-1 rounded-2xl bg-birch-50 px-6 py-4">
+                <p className="text-xs text-charcoal-muted">주문번호</p>
+                {orderNumbers.map((num) => (
+                  <p key={num} className="font-mono text-lg font-bold text-charcoal">{num}</p>
+                ))}
+                <p className="mt-1 text-[11px] text-charcoal-muted">주문번호를 메모해두시면 비회원 주문 조회 시 사용할 수 있습니다.</p>
+              </div>
+            )}
           </div>
 
           <div className="mt-10 rounded-3xl border border-birch-200 bg-white p-6 sm:p-8">
@@ -231,10 +254,21 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
             )}
           </div>
 
-          <div className="mt-6 flex justify-center gap-3">
-            <button onClick={() => onNavigate("/")} className="btn-outline">홈으로</button>
-            {session && (
-              <button onClick={() => onNavigate("/account")} className="btn-primary">내 주문 보기</button>
+          <div className="mt-6 flex flex-col items-center gap-3">
+            <div className="flex justify-center gap-3">
+              <button onClick={() => onNavigate("/")} className="btn-outline">홈으로</button>
+              {session && (
+                <button onClick={() => onNavigate("/account")} className="btn-primary">내 주문 보기</button>
+              )}
+            </div>
+            {!session && (
+              <button
+                onClick={() => onNavigate("/guest-order")}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-charcoal-muted transition-colors hover:text-charcoal"
+              >
+                <Search size={13} />
+                비회원 주문 조회
+              </button>
             )}
           </div>
         </div>

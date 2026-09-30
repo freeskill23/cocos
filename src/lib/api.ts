@@ -257,9 +257,22 @@ export interface OrderInsert {
   portone_merchant_id?: string | null;
 }
 
-export async function insertOrder(order: OrderInsert): Promise<void> {
-  const { error } = await supabase.from("orders").insert(order);
+export async function insertOrder(order: OrderInsert): Promise<string | null> {
+  const orderNumber = generateOrderNumber();
+  const { data, error } = await supabase
+    .from("orders")
+    .insert({ ...order, order_number: orderNumber })
+    .select("id")
+    .single();
   if (error) throw error;
+  return data?.id ?? null;
+}
+
+function generateOrderNumber(): string {
+  const now = new Date();
+  const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+  const random = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `COCO-${date}-${random}`;
 }
 
 export async function updateOrderStatus(id: string, status: string): Promise<void> {
@@ -333,6 +346,30 @@ export async function fetchOrderById(id: string): Promise<OrderRow | null> {
 
 export async function deleteOrder(id: string): Promise<void> {
   const { error } = await supabase.from("orders").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function bulkDeleteOrders(ids: string[]): Promise<void> {
+  const { error } = await supabase.from("orders").delete().in("id", ids);
+  if (error) throw error;
+}
+
+export async function fetchOrderByNumber(orderNumber: string): Promise<OrderRow | null> {
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("order_number", orderNumber.trim().toUpperCase())
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function cancelOrder(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("orders")
+    .update({ status: "cancelled", updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .in("status", ["received", "payment_pending"]);
   if (error) throw error;
 }
 

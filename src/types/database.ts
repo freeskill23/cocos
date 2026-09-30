@@ -77,6 +77,7 @@ export interface OrderRow {
   payment_method: string | null;
   portone_payment_id: string | null;
   portone_merchant_id: string | null;
+  order_number: string | null;
   created_at: string;
   updated_at: string;
 }

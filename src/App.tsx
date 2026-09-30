@@ -13,6 +13,7 @@ import { AuthPage } from "@/pages/AuthPage";
 import { AccountPage } from "@/pages/AccountPage";
 import { CartPage } from "@/pages/CartPage";
 import { CheckoutPage } from "@/pages/CheckoutPage";
+import { GuestOrderPage } from "@/pages/GuestOrderPage";
 import { AdminLogin } from "@/pages/AdminLogin";
 import { AdminDashboard } from "@/pages/AdminDashboard";
 import { BusinessInfoPage, PrivacyPage, RefundPolicyPage } from "@/pages/LegalPages";
@@ -94,6 +95,8 @@ function AppRoutes() {
         <CartPage onNavigate={navigate} />
       ) : path === "/checkout" ? (
         <CheckoutPage onNavigate={navigate} />
+      ) : path === "/guest-order" ? (
+        <GuestOrderPage onNavigate={navigate} />
       ) : productId ? (
         <ProductDetailPage productId={productId} onNavigate={navigate} />
       ) : path.startsWith("/custom") ? (
