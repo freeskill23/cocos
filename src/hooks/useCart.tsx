@@ -8,6 +8,7 @@ import {
   deleteAllCartItems,
   type CartItemInsert,
 } from "@/lib/api";
+import { safeUUID } from "@/lib/pricing";
 import type { CartItemRow, SelectedOption } from "@/types/database";
 
 const SESSION_ID_KEY = "cocosfit_session_id";
@@ -15,7 +16,7 @@ const SESSION_ID_KEY = "cocosfit_session_id";
 function getOrCreateSessionId(): string {
   let id = localStorage.getItem(SESSION_ID_KEY);
   if (!id) {
-    id = crypto.randomUUID();
+    id = safeUUID();
     localStorage.setItem(SESSION_ID_KEY, id);
   }
   return id;

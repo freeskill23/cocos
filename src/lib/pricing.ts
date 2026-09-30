@@ -43,9 +43,9 @@ export function calculatePrice(input: PriceInput, sizes: SizeSettings = DEFAULT_
     sizes,
   );
 
-  const widthDiffCm = Math.max(0, Math.round((d.width - baseW.width) / 10));
-  const depthDiffCm = Math.max(0, Math.round((d.depth - baseW.depth) / 10));
-  const heightDiffCm = Math.max(0, Math.round((d.height - baseW.height) / 10));
+  const widthDiffCm = Math.max(0, Math.floor((d.width - baseW.width) / 10));
+  const depthDiffCm = Math.max(0, Math.floor((d.depth - baseW.depth) / 10));
+  const heightDiffCm = Math.max(0, Math.floor((d.height - baseW.height) / 10));
 
   const basePrice = input.product.base_price;
   const widthAdjust = widthDiffCm * p.perCmWidth;
@@ -62,6 +62,21 @@ export function calculatePrice(input: PriceInput, sizes: SizeSettings = DEFAULT_
   const total = subtotal + shippingFee;
 
   return { basePrice, widthAdjust, depthAdjust, heightAdjust, packagingFee, shippingFee, total };
+}
+
+export function safeUUID(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    try {
+      return crypto.randomUUID();
+    } catch {
+      // fall through
+    }
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 }
 
 export function formatWon(n: number): string {

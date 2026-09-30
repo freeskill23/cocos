@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Save, Loader2, AlertCircle, Check, Plus, Trash2 } from "lucide-react";
 import { fetchSettings, upsertSetting } from "@/lib/api";
+import { safeUUID } from "@/lib/pricing";
 import type { PricingSettings, SizeSettings, BankAccount, PortOneConfig } from "@/types/database";
 import { DEFAULT_PRICING, DEFAULT_SIZES } from "@/config/pricing";
 
@@ -165,7 +166,7 @@ export function SettingsTab() {
             </div>
           ))}
           <button
-            onClick={() => setBankAccounts([...bankAccounts, { id: crypto.randomUUID(), bank: "", accountNumber: "", accountHolder: "" }])}
+            onClick={() => setBankAccounts([...bankAccounts, { id: safeUUID(), bank: "", accountNumber: "", accountHolder: "" }])}
             className="inline-flex items-center gap-1.5 rounded-lg border border-birch-200 px-4 py-2.5 text-xs font-medium text-charcoal transition-colors hover:bg-birch-50"
           >
             <Plus size={14} />

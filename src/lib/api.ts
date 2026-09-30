@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import type { OrderRow, PortfolioRow, ReviewRow, SettingsMap, ProductRow, SelectedOption, CategoryRow, CartItemRow, ProductCategoryRow } from "@/types/database";
+import { safeUUID } from "@/lib/pricing";
 
 export async function fetchActiveCategories(): Promise<CategoryRow[]> {
   const { data, error } = await supabase
@@ -276,7 +277,7 @@ export async function updateOrderMemo(id: string, memo: string): Promise<void> {
 }
 
 export async function generatePaymentToken(id: string): Promise<string> {
-  const token = crypto.randomUUID();
+  const token = safeUUID();
   const { error } = await supabase
     .from("orders")
     .update({ payment_token: token, status: "payment_pending", updated_at: new Date().toISOString() })
