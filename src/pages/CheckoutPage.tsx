@@ -15,7 +15,7 @@ interface CheckoutPageProps {
 type PaymentMethod = "bank_transfer" | "card";
 
 export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
-  const { items, clear } = useCart();
+  const { items, buyNowItem, clear, clearBuyNow } = useCart();
   const { session, signIn, signUp } = useAuth();
   const [mode, setMode] = useState<"guest" | "login" | "signup">("guest");
   const [email, setEmail] = useState("");
@@ -46,7 +46,8 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
     });
   }, []);
 
-  const total = items.reduce((sum, i) => sum + i.unit_price * i.quantity, 0);
+  const checkoutItems = buyNowItem ? [buyNowItem] : items;
+  const total = checkoutItems.reduce((sum, i) => sum + i.unit_price * i.quantity, 0);
   const phonePattern = /^010-\d{3,4}-\d{4}$/;
   const phoneError = customer.phone && !phonePattern.test(customer.phone)
     ? "올바른 전화번호 형식이 아닙니다 (예: 010-0000-0000)"
@@ -80,7 +81,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
         }
 
         const merchantIds: string[] = [];
-        for (const item of items) {
+        for (const item of checkoutItems) {
           const merchantId = `order_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
           merchantIds.push(merchantId);
           const order: OrderInsert = {
@@ -104,7 +105,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
           await insertOrder(order);
         }
 
-        const orderNames = items.map((i) => `${i.product_name} × ${i.quantity}`).join(", ");
+        const orderNames = checkoutItems.map((i) => `${i.product_name} × ${i.quantity}`).join(", ");
         const firstMerchantId = merchantIds[0];
         const redirectUrl = `${window.location.origin}/pay/card/${firstMerchantId}`;
 
@@ -121,13 +122,13 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
         });
 
         if (result.status === "PAID") {
-          await clear();
+          if (buyNowItem) { clearBuyNow(); } else { await clear(); }
           onNavigate(`/pay/card/${firstMerchantId}`);
         } else if (result.status === "FAILED") {
           setSubmitError("결제가 실패했습니다. 다시 시도해주세요.");
         }
       } else {
-        for (const item of items) {
+        for (const item of checkoutItems) {
           const order: OrderInsert = {
             product_id: item.product_id,
             product_name: item.product_name,
@@ -147,7 +148,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
           };
           await insertOrder(order);
         }
-        await clear();
+        if (buyNowItem) { clearBuyNow(); } else { await clear(); }
         setSubmitted(true);
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
@@ -241,7 +242,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
     );
   }
 
-  if (items.length === 0) {
+  if (checkoutItems.length === 0) {
     return (
       <main className="min-h-screen bg-ivory pt-20 md:pt-24">
         <div className="mx-auto max-w-2xl px-5 py-16 text-center">
@@ -301,7 +302,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
         <div className="mt-8 rounded-3xl border border-birch-200 bg-white p-6 sm:p-8">
           <h3 className="text-sm font-semibold text-charcoal">주문 상품</h3>
           <div className="mt-4 space-y-3">
-            {items.map((item) => (
+            {checkoutItems.map((item) => (
               <div key={item.id} className="flex items-center justify-between border-b border-birch-100 pb-3 last:border-0">
                 <div>
                   <p className="text-sm font-medium text-charcoal">{item.product_name} × {item.quantity}</p>

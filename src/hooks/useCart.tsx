@@ -35,11 +35,13 @@ export interface AddToCartParams {
 
 interface CartContextType {
   items: CartItemRow[];
+  buyNowItem: CartItemRow | null;
   loading: boolean;
   count: number;
   refresh: () => Promise<void>;
   add: (params: AddToCartParams) => Promise<void>;
   buyNow: (params: AddToCartParams) => Promise<void>;
+  clearBuyNow: () => void;
   updateQuantity: (id: string, quantity: number) => Promise<void>;
   remove: (id: string) => Promise<void>;
   clear: () => Promise<void>;
@@ -49,6 +51,7 @@ const CartContext = createContext<CartContextType | null>(null);
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItemRow[]>([]);
+  const [buyNowItem, setBuyNowItem] = useState<CartItemRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [sessionId] = useState(getOrCreateSessionId);
 
@@ -94,10 +97,30 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const buyNow = useCallback(
     async (params: AddToCartParams) => {
-      await add(params);
+      const { data: userData } = await supabase.auth.getUser();
+      const item: CartItemRow = {
+        id: `buynow_${Date.now()}`,
+        session_id: userData.user ? null : sessionId,
+        user_id: userData.user?.id ?? null,
+        product_id: params.product_id,
+        product_name: params.product_name,
+        width: params.width,
+        depth: params.depth,
+        height: params.height,
+        selected_options: params.selected_options,
+        unit_price: params.unit_price,
+        quantity: params.quantity,
+        memo: params.memo ?? null,
+        created_at: new Date().toISOString(),
+      };
+      setBuyNowItem(item);
     },
-    [add]
+    [sessionId]
   );
+
+  const clearBuyNow = useCallback(() => {
+    setBuyNowItem(null);
+  }, []);
 
   const updateQuantity = useCallback(
     async (id: string, quantity: number) => {
@@ -125,7 +148,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const count = items.reduce((sum, i) => sum + i.quantity, 0);
 
   return (
-    <CartContext.Provider value={{ items, loading, count, refresh, add, buyNow, updateQuantity, remove, clear }}>
+    <CartContext.Provider value={{ items, buyNowItem, loading, count, refresh, add, buyNow, clearBuyNow, updateQuantity, remove, clear }}>
       {children}
     </CartContext.Provider>
   );
