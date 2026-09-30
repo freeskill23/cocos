@@ -237,7 +237,6 @@ export function Step3Order({
               {breakdown.widthAdjust > 0 && <SummaryRow label="가로 추가" value={`+${formatWon(breakdown.widthAdjust)}`} />}
               {breakdown.depthAdjust > 0 && <SummaryRow label="세로 추가" value={`+${formatWon(breakdown.depthAdjust)}`} />}
               {breakdown.heightAdjust > 0 && <SummaryRow label="높이 추가" value={`+${formatWon(breakdown.heightAdjust)}`} />}
-              <SummaryRow label="포장비" value={formatWon(breakdown.packagingFee)} />
               <SummaryRow label="배송비" value={breakdown.shippingFee === 0 ? "무료" : formatWon(breakdown.shippingFee)} />
               {selectedOptions.map((s, i) => (
                 <SummaryRow key={i} label={s.optionName} value={s.price > 0 ? `+${formatWon(s.price)}` : s.valueLabel} />

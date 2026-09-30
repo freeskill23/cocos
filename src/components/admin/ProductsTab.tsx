@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Plus, Trash2, Edit3, X, Loader2, Eye, EyeOff, Save, Package, GripVertical } from "lucide-react";
+import { Plus, Trash2, Edit3, X, Loader2, Eye, EyeOff, Save, Package, GripVertical, Truck } from "lucide-react";
 import { fetchAllProducts, upsertProduct, deleteProduct, fetchAllCategories } from "@/lib/api";
 import type { ProductRow, ProductOption, ProductOptionValue, CategoryRow } from "@/types/database";
 import { formatWon } from "@/lib/pricing";
@@ -167,6 +167,9 @@ function ProductEditor({
   const [customizableWidth, setCustomizableWidth] = useState(item?.customizable_width ?? true);
   const [customizableDepth, setCustomizableDepth] = useState(item?.customizable_depth ?? true);
   const [customizableHeight, setCustomizableHeight] = useState(item?.customizable_height ?? true);
+  const [useDefaultShipping, setUseDefaultShipping] = useState(item?.shipping_fee === null && item?.free_shipping_threshold === null);
+  const [shippingFee, setShippingFee] = useState(item?.shipping_fee ?? 15000);
+  const [freeShippingThreshold, setFreeShippingThreshold] = useState(item?.free_shipping_threshold ?? 200000);
   const [options, setOptions] = useState<ProductOption[]>(
     (item?.options ?? []).map((o) => ({
       ...o,
@@ -203,6 +206,8 @@ function ProductEditor({
         customizable_width: customizableWidth,
         customizable_depth: customizableDepth,
         customizable_height: customizableHeight,
+        shipping_fee: useDefaultShipping ? null : shippingFee,
+        free_shipping_threshold: useDefaultShipping ? null : freeShippingThreshold,
         options,
       });
       onSaved();
@@ -328,6 +333,33 @@ function ProductEditor({
                 {active ? "판매중" : "판매중지"}
               </button>
             </FormField>
+          </div>
+
+          <div className="rounded-2xl bg-birch-50 p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-charcoal">배송비 설정</p>
+              <label className="flex items-center gap-2 text-xs text-charcoal-muted">
+                <input
+                  type="checkbox"
+                  checked={useDefaultShipping}
+                  onChange={(e) => setUseDefaultShipping(e.target.checked)}
+                  className="h-4 w-4 accent-birch-600"
+                />
+                기본 배송비 사용
+              </label>
+            </div>
+            {useDefaultShipping ? (
+              <p className="mt-3 text-xs text-charcoal-muted">설정에 등록된 기본 배송비와 무료배송 기준이 적용됩니다.</p>
+            ) : (
+              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                <FormField label="배송비 (원)">
+                  <input type="number" value={shippingFee} onChange={(e) => setShippingFee(Number(e.target.value) || 0)} className="input-field" />
+                </FormField>
+                <FormField label="무료배송 기준 (원)">
+                  <input type="number" value={freeShippingThreshold} onChange={(e) => setFreeShippingThreshold(Number(e.target.value) || 0)} className="input-field" />
+                </FormField>
+              </div>
+            )}
           </div>
 
           <OptionsEditor options={options} setOptions={setOptions} />

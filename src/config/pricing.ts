@@ -2,7 +2,6 @@ export interface PricingSettings {
   baseFee: number;
   areaRatePerSqmm: number;
   sizeScaleRate: number;
-  packagingFee: number;
   shippingFee: number;
   freeShippingThreshold: number;
   perCmWidth: number;
@@ -23,7 +22,6 @@ export const DEFAULT_PRICING: PricingSettings = {
   baseFee: 30000,
   areaRatePerSqmm: 0.18,
   sizeScaleRate: 0.04,
-  packagingFee: 4000,
   shippingFee: 15000,
   freeShippingThreshold: 200000,
   perCmWidth: 500,

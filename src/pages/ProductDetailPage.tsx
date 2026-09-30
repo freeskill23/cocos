@@ -327,10 +327,9 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
                       <span className="text-xs text-charcoal-muted">단가 × {quantity}개</span>
                       <span className="text-base font-bold text-charcoal">{formatWon(unitPrice * quantity)}</span>
                     </div>
-                    {(breakdown?.packagingFee ?? 0) + (breakdown?.shippingFee ?? 0) > 0 && (
+                    {(breakdown?.shippingFee ?? 0) > 0 && (
                       <div className="mt-1.5 flex items-center justify-between text-[11px] text-charcoal-muted">
-                        <span>+ 포장비 {formatWon(breakdown?.packagingFee ?? 0)}</span>
-                        {(breakdown?.shippingFee ?? 0) > 0 && <span>+ 배송비 {formatWon(breakdown?.shippingFee ?? 0)}</span>}
+                        <span>+ 배송비 {formatWon(breakdown?.shippingFee ?? 0)}</span>
                         <span className="ml-auto">(주문 시 추가)</span>
                       </div>
                     )}

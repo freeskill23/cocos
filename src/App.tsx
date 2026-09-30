@@ -1,6 +1,7 @@
 import { useRouter } from "@/lib/router";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { CartProvider } from "@/hooks/useCart";
+import { useSEO } from "@/hooks/useSEO";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { ShopPage } from "@/pages/ShopPage";
@@ -20,6 +21,7 @@ import { Loader2 } from "lucide-react";
 function AppRoutes() {
   const { path, navigate } = useRouter();
   const { session, loading } = useAuth();
+  useSEO(path);
 
   const isAdmin = path.startsWith("/admin");
   const isAdminLogin = path === "/admin/login";

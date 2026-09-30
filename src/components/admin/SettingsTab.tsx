@@ -100,9 +100,8 @@ export function SettingsTab() {
         {/* Other pricing */}
         <div className="rounded-3xl border border-birch-200 bg-white p-6">
           <h2 className="text-base font-semibold text-charcoal">기타 가격 설정</h2>
-          <p className="mt-1 text-xs text-charcoal-muted">포장비, 배송비 등 추가 비용 설정입니다.</p>
+          <p className="mt-1 text-xs text-charcoal-muted">배송비 등 추가 비용 설정입니다.</p>
           <div className="mt-6 space-y-4">
-            <NumberField label="포장비 (원)" value={pricing.packagingFee} onChange={(v) => setPricing({ ...pricing, packagingFee: v })} />
             <NumberField label="배송비 (원)" value={pricing.shippingFee} onChange={(v) => setPricing({ ...pricing, shippingFee: v })} />
             <NumberField label="무료배송 기준 (원)" value={pricing.freeShippingThreshold} onChange={(v) => setPricing({ ...pricing, freeShippingThreshold: v })} />
           </div>

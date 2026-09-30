@@ -13,13 +13,12 @@ export interface PriceBreakdown {
   widthAdjust: number;
   depthAdjust: number;
   heightAdjust: number;
-  packagingFee: number;
   shippingFee: number;
   total: number;
 }
 
 export interface PriceInput {
-  product: Pick<ProductRow, "base_width" | "base_depth" | "base_height" | "base_price">;
+  product: Pick<ProductRow, "base_width" | "base_depth" | "base_height" | "base_price" | "shipping_fee" | "free_shipping_threshold">;
   dimensions: HouseDimensions;
   pricing: PricingSettings;
 }
@@ -52,16 +51,17 @@ export function calculatePrice(input: PriceInput, sizes: SizeSettings = DEFAULT_
   const depthAdjust = depthDiffCm * p.perCmDepth;
   const heightAdjust = heightDiffCm * p.perCmHeight;
 
-  const packagingFee = p.packagingFee;
-  let shippingFee = p.shippingFee;
-  const subtotal = basePrice + widthAdjust + depthAdjust + heightAdjust + packagingFee;
-  if (subtotal >= p.freeShippingThreshold) {
+  const productShippingFee = input.product.shipping_fee ?? p.shippingFee;
+  const productFreeThreshold = input.product.free_shipping_threshold ?? p.freeShippingThreshold;
+  let shippingFee = productShippingFee;
+  const subtotal = basePrice + widthAdjust + depthAdjust + heightAdjust;
+  if (subtotal >= productFreeThreshold) {
     shippingFee = 0;
   }
 
   const total = subtotal + shippingFee;
 
-  return { basePrice, widthAdjust, depthAdjust, heightAdjust, packagingFee, shippingFee, total };
+  return { basePrice, widthAdjust, depthAdjust, heightAdjust, shippingFee, total };
 }
 
 export function safeUUID(): string {

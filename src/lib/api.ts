@@ -137,6 +137,8 @@ export interface ProductUpsertData {
   customizable_width: boolean;
   customizable_depth: boolean;
   customizable_height: boolean;
+  shipping_fee: number | null;
+  free_shipping_threshold: number | null;
   options: ProductRow["options"];
   category_ids?: string[];
 }

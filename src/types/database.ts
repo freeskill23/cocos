@@ -50,6 +50,8 @@ export interface ProductRow {
   customizable_width: boolean;
   customizable_depth: boolean;
   customizable_height: boolean;
+  shipping_fee: number | null;
+  free_shipping_threshold: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -109,7 +111,6 @@ export interface PricingSettings {
   baseFee: number;
   areaRatePerSqmm: number;
   sizeScaleRate: number;
-  packagingFee: number;
   shippingFee: number;
   freeShippingThreshold: number;
   perCmWidth: number;
