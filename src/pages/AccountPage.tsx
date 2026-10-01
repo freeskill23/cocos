@@ -57,9 +57,8 @@ export function AccountPage({ onNavigate }: AccountPageProps) {
   }
 
   const statusLabels: Record<string, string> = {
-    received: "접수 완료",
-    payment_pending: "입금 대기",
-    in_review: "검토 중",
+    payment_pending: "결제 대기",
+    paid: "결제 완료",
     in_production: "제작 중",
     shipped: "배송 중",
     completed: "완료",
@@ -67,16 +66,15 @@ export function AccountPage({ onNavigate }: AccountPageProps) {
   };
 
   const statusColors: Record<string, string> = {
-    received: "bg-birch-100 text-charcoal",
     payment_pending: "bg-amber-100 text-amber-700",
-    in_review: "bg-amber-100 text-amber-700",
+    paid: "bg-teal-100 text-teal-700",
     in_production: "bg-blue-100 text-blue-700",
-    shipped: "bg-blue-100 text-blue-700",
+    shipped: "bg-indigo-100 text-indigo-700",
     completed: "bg-green-100 text-green-700",
     cancelled: "bg-red-100 text-red-700",
   };
 
-  const cancellableStatuses = ["received", "payment_pending"];
+  const cancellableStatuses = ["payment_pending", "paid"];
 
   return (
     <main className="min-h-screen bg-ivory pt-20 md:pt-24">

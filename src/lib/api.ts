@@ -314,7 +314,7 @@ export async function fetchOrderByToken(token: string): Promise<OrderRow | null>
 export async function confirmPaymentByToken(token: string): Promise<void> {
   const { error } = await supabase
     .from("orders")
-    .update({ status: "in_production", updated_at: new Date().toISOString() })
+    .update({ status: "paid", updated_at: new Date().toISOString() })
     .eq("payment_token", token);
   if (error) throw error;
 }
@@ -326,7 +326,7 @@ export async function confirmCardPayment(
   const { error } = await supabase
     .from("orders")
     .update({
-      status: "in_production",
+      status: "paid",
       portone_payment_id: portonePaymentId,
       updated_at: new Date().toISOString(),
     })
@@ -342,6 +342,36 @@ export async function fetchOrderById(id: string): Promise<OrderRow | null> {
     .maybeSingle();
   if (error) throw error;
   return data;
+}
+
+export async function updateOrderShipping(
+  id: string,
+  shippingCompany: string,
+  trackingNumber: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("orders")
+    .update({
+      status: "shipped",
+      shipping_company: shippingCompany,
+      tracking_number: trackingNumber,
+      shipped_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function autoCompleteShippedOrders(): Promise<number> {
+  const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("orders")
+    .update({ status: "completed", updated_at: new Date().toISOString() })
+    .eq("status", "shipped")
+    .lt("shipped_at", twoDaysAgo)
+    .select("id");
+  if (error) throw error;
+  return data?.length ?? 0;
 }
 
 export async function deleteOrder(id: string): Promise<void> {
@@ -369,7 +399,7 @@ export async function cancelOrder(id: string): Promise<void> {
     .from("orders")
     .update({ status: "cancelled", updated_at: new Date().toISOString() })
     .eq("id", id)
-    .in("status", ["received", "payment_pending"]);
+    .in("status", ["payment_pending", "paid"]);
   if (error) throw error;
 }
 

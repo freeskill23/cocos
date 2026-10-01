@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
-import { Trash2, ChevronDown, ChevronUp, Loader2, RefreshCw, Link2, Copy, Check, Printer, Save } from "lucide-react";
-import { fetchAllOrders, updateOrderStatus, updateOrderMemo, deleteOrder, bulkDeleteOrders, generatePaymentToken } from "@/lib/api";
+import { Trash2, ChevronDown, ChevronUp, Loader2, RefreshCw, Copy, Check, Printer, Save, Truck, CheckCircle2, Hammer, XCircle } from "lucide-react";
+import { fetchAllOrders, updateOrderStatus, updateOrderMemo, deleteOrder, bulkDeleteOrders, updateOrderShipping, autoCompleteShippedOrders } from "@/lib/api";
 import type { OrderRow } from "@/types/database";
-import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, type OrderStatus } from "@/lib/supabase";
+import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, SHIPPING_COMPANIES, type OrderStatus } from "@/lib/supabase";
 import { formatWon } from "@/lib/pricing";
 import { BRAND } from "@/config/brand";
 
@@ -23,6 +23,7 @@ export function OrdersTab({ onCountChange }: OrdersTabProps) {
     setLoading(true);
     setError(null);
     try {
+      await autoCompleteShippedOrders();
       const data = await fetchAllOrders();
       setOrders(data);
       onCountChange(data.length);
@@ -46,6 +47,15 @@ export function OrdersTab({ onCountChange }: OrdersTabProps) {
     }
   };
 
+  const handleShipping = async (id: string, company: string, tracking: string) => {
+    try {
+      await updateOrderShipping(id, company, tracking);
+      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: "shipped", shipping_company: company, tracking_number: tracking, shipped_at: new Date().toISOString() } : o)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "배송 정보 저장에 실패했습니다.");
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm("정말 이 주문을 삭제하시겠습니까?")) return;
     try {
@@ -63,15 +73,6 @@ export function OrdersTab({ onCountChange }: OrdersTabProps) {
       setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, memo } : o)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "메모 저장에 실패했습니다.");
-    }
-  };
-
-  const handleGeneratePaymentLink = async (id: string) => {
-    try {
-      const token = await generatePaymentToken(id);
-      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, payment_token: token, status: "payment_pending" } : o)));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "결제 링크 생성에 실패했습니다.");
     }
   };
 
@@ -131,7 +132,7 @@ export function OrdersTab({ onCountChange }: OrdersTabProps) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-serif text-2xl text-charcoal sm:text-3xl">주문 관리</h1>
-          <p className="mt-2 text-sm text-charcoal-muted">접수된 주문 신청 목록입니다.</p>
+          <p className="mt-2 text-sm text-charcoal-muted">접수된 주문 목록입니다.</p>
         </div>
         <button onClick={load} className="btn-ghost text-sm">
           <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
@@ -206,9 +207,9 @@ export function OrdersTab({ onCountChange }: OrdersTabProps) {
               onToggle={() => setExpandedId(expandedId === order.id ? null : order.id)}
               onSelect={() => toggleSelect(order.id)}
               onStatusChange={handleStatusChange}
+              onShipping={handleShipping}
               onDelete={handleDelete}
               onMemoSave={handleMemoSave}
-              onGeneratePaymentLink={handleGeneratePaymentLink}
             />
           ))}
         </div>
@@ -245,9 +246,9 @@ function OrderCard({
   onToggle,
   onSelect,
   onStatusChange,
+  onShipping,
   onDelete,
   onMemoSave,
-  onGeneratePaymentLink,
 }: {
   order: OrderRow;
   expanded: boolean;
@@ -255,28 +256,21 @@ function OrderCard({
   onToggle: () => void;
   onSelect: () => void;
   onStatusChange: (id: string, status: OrderStatus) => void;
+  onShipping: (id: string, company: string, tracking: string) => void;
   onDelete: (id: string) => void;
   onMemoSave: (id: string, memo: string) => void;
-  onGeneratePaymentLink: (id: string) => void;
 }) {
   const status = order.status as OrderStatus;
   const created = new Date(order.created_at);
   const [editingMemo, setEditingMemo] = useState(false);
   const [memoDraft, setMemoDraft] = useState(order.memo ?? "");
-  const [linkCopied, setLinkCopied] = useState(false);
+  const [shippingCompany, setShippingCompany] = useState("");
+  const [trackingNumber, setTrackingNumber] = useState("");
+  const [shippingError, setShippingError] = useState<string | null>(null);
 
   useEffect(() => {
     setMemoDraft(order.memo ?? "");
   }, [order.memo]);
-
-  const handleCopyLink = () => {
-    const base = window.location.origin + window.location.pathname.replace(/index\.html$/, "");
-    const link = `${base}#/pay/${order.payment_token}`;
-    navigator.clipboard.writeText(link).then(() => {
-      setLinkCopied(true);
-      setTimeout(() => setLinkCopied(false), 2000);
-    });
-  };
 
   const handleSaveMemo = () => {
     onMemoSave(order.id, memoDraft.trim());
@@ -337,8 +331,17 @@ function OrderCard({
     win.document.close();
   };
 
-  const showPaymentLink = status === "payment_pending" && order.payment_token;
-  const canGenerateLink = status === "received";
+  const handleShip = () => {
+    if (!shippingCompany || !trackingNumber.trim()) {
+      setShippingError("택배사와 송장번호를 모두 입력해주세요.");
+      return;
+    }
+    setShippingError(null);
+    onShipping(order.id, shippingCompany, trackingNumber.trim());
+  };
+
+  const canComplete = status === "shipped" && order.shipped_at &&
+    Date.now() - new Date(order.shipped_at).getTime() >= 2 * 24 * 60 * 60 * 1000;
 
   return (
     <div className={`overflow-hidden rounded-2xl border bg-white transition-colors ${selected ? "border-birch-400 ring-1 ring-birch-300" : "border-birch-200"}`}>
@@ -360,9 +363,14 @@ function OrderCard({
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold text-charcoal">{order.customer_name}</span>
-                <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-medium ${ORDER_STATUS_COLORS[status]}`}>
-                  {ORDER_STATUS_LABELS[status]}
+                <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-medium ${ORDER_STATUS_COLORS[status] ?? "bg-birch-100 text-charcoal"}`}>
+                  {ORDER_STATUS_LABELS[status] ?? order.status}
                 </span>
+                {order.payment_method && (
+                  <span className="rounded-full bg-birch-50 px-2 py-0.5 text-[10px] text-charcoal-muted">
+                    {order.payment_method === "card" ? "카드" : "무통장입금"}
+                  </span>
+                )}
               </div>
               <p className="mt-1 text-xs text-charcoal-muted">
                 {order.product_name || "-"} · {order.width}×{order.depth}×{order.height}mm · {formatWon(order.total_price)}
@@ -447,55 +455,108 @@ function OrderCard({
 
               <h4 className="mt-4 text-xs font-semibold text-charcoal-muted">결제</h4>
               <div className="mt-2 space-y-1.5 text-sm">
+                <DetailRow label="결제 방법" value={order.payment_method === "card" ? "카드 결제" : order.payment_method === "bank_transfer" ? "무통장입금" : "-"} />
                 <DetailRow label="총 견적" value={formatWon(order.total_price)} />
               </div>
 
-              {canGenerateLink && (
-                <div className="mt-4">
-                  <button
-                    onClick={() => onGeneratePaymentLink(order.id)}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-birch-600 px-4 py-2.5 text-xs font-medium text-white transition-colors hover:bg-birch-700"
-                  >
-                    <Link2 size={14} />
-                    접수완료 · 결제 링크 생성
-                  </button>
-                  <p className="mt-2 text-[11px] text-charcoal-muted">
-                    결제 링크가 생성되면 고객에게 전달해주세요. 고객이 결제를 완료하면 자동으로 제작 중으로 전환됩니다.
-                  </p>
-                </div>
-              )}
-
-              {showPaymentLink && (
+              {status === "shipped" && order.shipping_company && (
                 <div className="mt-4 rounded-xl border border-birch-200 bg-birch-50 p-3">
-                  <p className="text-xs font-semibold text-charcoal">고객 결제 링크</p>
-                  <div className="mt-2 flex items-center gap-2">
-                    <code className="flex-1 truncate rounded-lg bg-white px-3 py-2 text-[11px] text-charcoal-muted">
-                      {window.location.origin}{window.location.pathname.replace(/index\.html$/, "")}#/pay/{order.payment_token}
-                    </code>
-                    <button
-                      onClick={handleCopyLink}
-                      className="inline-flex items-center gap-1 rounded-lg border border-birch-200 bg-white px-3 py-2 text-xs font-medium text-charcoal transition-colors hover:bg-birch-100"
-                    >
-                      {linkCopied ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
-                      {linkCopied ? "복사됨" : "복사"}
-                    </button>
+                  <h4 className="text-xs font-semibold text-charcoal">배송 정보</h4>
+                  <div className="mt-2 space-y-1.5 text-sm">
+                    <DetailRow label="택배사" value={order.shipping_company} />
+                    <DetailRow label="송장번호" value={order.tracking_number ?? "-"} />
+                    {order.shipped_at && (
+                      <DetailRow label="배송 시작" value={new Date(order.shipped_at).toLocaleDateString("ko-KR")} />
+                    )}
                   </div>
                 </div>
               )}
 
-              <div className="mt-5">
-                <label className="text-xs font-semibold text-charcoal-muted">주문 상태 변경</label>
-                <select
-                  value={order.status}
-                  onChange={(e) => onStatusChange(order.id, e.target.value as OrderStatus)}
-                  className="mt-2 w-full rounded-xl border border-birch-200 bg-white px-4 py-2.5 text-sm font-medium text-charcoal focus:border-birch-400 focus:outline-none focus:ring-2 focus:ring-birch-200"
-                >
-                  {(Object.keys(ORDER_STATUS_LABELS) as OrderStatus[]).map((s) => (
-                    <option key={s} value={s}>
-                      {ORDER_STATUS_LABELS[s]}
-                    </option>
-                  ))}
-                </select>
+              {/* Action buttons based on status */}
+              <div className="mt-5 space-y-3">
+                {status === "payment_pending" && order.payment_method === "bank_transfer" && (
+                  <button
+                    onClick={() => onStatusChange(order.id, "paid")}
+                    className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-teal-700"
+                  >
+                    <CheckCircle2 size={16} />
+                    입금 확인 · 결제 완료
+                  </button>
+                )}
+
+                {status === "paid" && (
+                  <button
+                    onClick={() => onStatusChange(order.id, "in_production")}
+                    className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+                  >
+                    <Hammer size={16} />
+                    제작 시작
+                  </button>
+                )}
+
+                {status === "in_production" && (
+                  <div className="rounded-xl border border-birch-200 bg-birch-50 p-4">
+                    <h4 className="text-xs font-semibold text-charcoal">배송 정보 입력</h4>
+                    <div className="mt-3 space-y-2">
+                      <select
+                        value={shippingCompany}
+                        onChange={(e) => setShippingCompany(e.target.value)}
+                        className="w-full rounded-lg border border-birch-200 bg-white px-3 py-2 text-sm text-charcoal focus:border-birch-400 focus:outline-none"
+                      >
+                        <option value="">택배사 선택</option>
+                        {SHIPPING_COMPANIES.map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        value={trackingNumber}
+                        onChange={(e) => setTrackingNumber(e.target.value)}
+                        placeholder="송장번호 입력"
+                        className="w-full rounded-lg border border-birch-200 bg-white px-3 py-2 text-sm text-charcoal focus:border-birch-400 focus:outline-none"
+                      />
+                      {shippingError && <p className="text-xs text-red-600">{shippingError}</p>}
+                      <button
+                        onClick={handleShip}
+                        className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
+                      >
+                        <Truck size={16} />
+                        배송 진행하기
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {status === "shipped" && (
+                  <div className="space-y-2">
+                    {canComplete ? (
+                      <button
+                        onClick={() => onStatusChange(order.id, "completed")}
+                        className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-green-700"
+                      >
+                        <CheckCircle2 size={16} />
+                        완료 처리
+                      </button>
+                    ) : (
+                      <p className="rounded-lg bg-birch-50 px-3 py-2 text-center text-xs text-charcoal-muted">
+                        배송 시작 후 2일이 경과하면 자동으로 완료됩니다.
+                        {order.shipped_at && (
+                          <> (배송 시작: {new Date(order.shipped_at).toLocaleDateString("ko-KR")})</>
+                        )}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {(status === "payment_pending" || status === "paid") && (
+                  <button
+                    onClick={() => onStatusChange(order.id, "cancelled")}
+                    className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
+                  >
+                    <XCircle size={16} />
+                    주문 취소
+                  </button>
+                )}
               </div>
 
               <div className="mt-5 flex gap-2">

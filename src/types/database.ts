@@ -78,6 +78,9 @@ export interface OrderRow {
   portone_payment_id: string | null;
   portone_merchant_id: string | null;
   order_number: string | null;
+  shipping_company: string | null;
+  tracking_number: string | null;
+  shipped_at: string | null;
   created_at: string;
   updated_at: string;
 }

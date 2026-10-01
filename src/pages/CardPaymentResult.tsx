@@ -34,7 +34,7 @@ export function CardPaymentResult({ merchantId, onNavigate }: CardPaymentResultP
         const paymentStatus = urlParams.get("status");
         const paymentId = urlParams.get("paymentId");
 
-        if (paymentStatus === "PAID" || (data.status === "in_production" && !paymentId)) {
+        if (paymentStatus === "PAID" || (data.status === "paid" && !paymentId)) {
           if (paymentId && data.portone_payment_id !== paymentId) {
             await confirmCardPayment(data.id, paymentId);
           }
@@ -104,7 +104,7 @@ export function CardPaymentResult({ merchantId, onNavigate }: CardPaymentResultP
           <p className="mt-4 max-w-md text-sm leading-relaxed text-charcoal-muted">
             {order.customer_name}님, 결제해주셔서 감사합니다.
             <br />
-            주문이 제작 중으로 전환되었습니다. 제작 완료 후 배송됩니다.
+            주문이 결제 완료되었습니다. 관리자 확인 후 제작이 시작됩니다.
           </p>
 
           <div className="mt-10 w-full max-w-md rounded-3xl border border-birch-200 bg-white p-6 text-left">

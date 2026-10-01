@@ -1,9 +1,10 @@
 import { useState, useMemo } from "react";
-import { Check, PartyPopper, ArrowRight, Loader2, AlertCircle } from "lucide-react";
+import { Check, PartyPopper, ArrowRight, Loader2, AlertCircle, Search, MapPin, X } from "lucide-react";
 import { StepHeader, Field } from "@/components/custom/Step1Product";
 import { calculatePrice, formatWon } from "@/lib/pricing";
 import { insertOrder } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
+import { useDaumPostcode } from "@/components/DaumPostcode";
 import { BRAND } from "@/config/brand";
 import type { PricingSettings, SizeSettings } from "@/config/pricing";
 import type { ProductRow, ProductOption, SelectedOption } from "@/types/database";
@@ -49,6 +50,7 @@ export function Step3Order({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
+  const postcode = useDaumPostcode();
 
   const breakdown = calculatePrice({ product, dimensions, pricing }, sizes);
 
@@ -198,24 +200,36 @@ export function Step3Order({
               className="input-field"
             />
           </Field>
-          <Field label="우편번호" optional>
-            <input
-              type="text"
-              value={customer.postcode}
-              onChange={(e) => update("postcode", e.target.value)}
-              placeholder="예: 06236"
-              className="input-field"
-            />
-          </Field>
-          <Field label="배송 주소">
-            <input
-              type="text"
-              value={customer.address}
-              onChange={(e) => update("address", e.target.value)}
-              placeholder="도로명 주소를 입력해주세요."
-              className="input-field"
-            />
-          </Field>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-charcoal">배송 주소</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={customer.postcode}
+                onChange={(e) => update("postcode", e.target.value)}
+                placeholder="우편번호"
+                className="input-field w-32"
+                readOnly
+              />
+              <input
+                type="text"
+                value={customer.address}
+                onChange={(e) => update("address", e.target.value)}
+                placeholder="도로명 주소"
+                className="input-field flex-1"
+                readOnly
+              />
+              <button
+                type="button"
+                onClick={() => postcode.open((data) => setCustomer({ ...customer, postcode: data.zonecode, address: data.address }))}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-charcoal px-4 text-sm font-medium text-ivory transition-all hover:bg-charcoal-light active:scale-[0.98]"
+              >
+                <Search size={15} />
+                주소 검색
+              </button>
+            </div>
+            <p className="mt-1.5 text-xs text-charcoal-muted">주소 검색 버튼을 눌러 도로명 주소를 검색하면 우편번호가 자동으로 입력됩니다.</p>
+          </div>
 
           <Field label="상세 주소">
             <input
@@ -223,7 +237,7 @@ export function Step3Order({
               type="text"
               value={customer.detailAddress}
               onChange={(e) => update("detailAddress", e.target.value)}
-              placeholder="동, 호수 등 상세 주소를 입력해주세요."
+              placeholder="동, 호수 등 상세 주소 (직접 입력)"
               className="input-field"
             />
           </Field>
@@ -304,6 +318,29 @@ export function Step3Order({
       <p className="mt-6 text-center text-xs text-charcoal-muted">
         {BRAND.nameKr}는 주문제작 상품으로, 제작 시작 후에는 취소가 어려울 수 있습니다.
       </p>
+
+      {postcode.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-4 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MapPin size={18} className="text-birch-600" />
+                <span className="text-sm font-semibold text-charcoal">도로명 주소 검색</span>
+              </div>
+              <button onClick={postcode.close} className="rounded-lg p-1.5 text-charcoal-muted transition-colors hover:bg-birch-50">
+                <X size={18} />
+              </button>
+            </div>
+            {postcode.loading ? (
+              <div className="flex h-96 items-center justify-center">
+                <Loader2 size={28} className="animate-spin text-birch-400" />
+              </div>
+            ) : (
+              <div ref={postcode.containerRef} className="h-96 w-full overflow-hidden rounded-lg" />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

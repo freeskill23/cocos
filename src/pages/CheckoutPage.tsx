@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Loader2, Check, ArrowRight, User, Mail, Lock, Copy, Building2, Info, CreditCard, Search } from "lucide-react";
+import { Loader2, Check, ArrowRight, User, Mail, Lock, Copy, Building2, Info, CreditCard, Search, MapPin, X } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 import { useAuth } from "@/hooks/useAuth";
 import { insertOrder, fetchSettings, type OrderInsert } from "@/lib/api";
@@ -7,6 +7,7 @@ import { formatWon } from "@/lib/pricing";
 import { BRAND } from "@/config/brand";
 import { requestCardPayment } from "@/lib/portone";
 import { supabase } from "@/lib/supabase";
+import { useDaumPostcode } from "@/components/DaumPostcode";
 import type { BankAccount, PortOneConfig } from "@/types/database";
 
 interface CheckoutPageProps {
@@ -40,6 +41,8 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const [portoneConfig, setPortoneConfig] = useState<PortOneConfig | null>(null);
   const [orderNumbers, setOrderNumbers] = useState<string[]>([]);
+  const [finalTotal, setFinalTotal] = useState(0);
+  const postcode = useDaumPostcode();
 
   useEffect(() => {
     fetchSettings().then((settings) => {
@@ -50,6 +53,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
 
   const checkoutItems = buyNowItem ? [buyNowItem] : items;
   const total = checkoutItems.reduce((sum, i) => sum + i.unit_price * i.quantity, 0);
+  const validBankAccounts = bankAccounts.filter((a) => a.bank.trim() && a.accountNumber.trim() && a.accountHolder.trim());
   const phonePattern = /^010-\d{3,4}-\d{4}$/;
   const phoneError = customer.phone && !phonePattern.test(customer.phone)
     ? "올바른 전화번호 형식이 아닙니다 (예: 010-0000-0000)"
@@ -162,6 +166,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
           }
         }
         setOrderNumbers(createdNumbers);
+        setFinalTotal(total);
         if (buyNowItem) { clearBuyNow(); } else { await clear(); }
         setSubmitted(true);
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -202,6 +207,19 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
                   <p key={num} className="font-mono text-lg font-bold text-charcoal">{num}</p>
                 ))}
                 <p className="mt-1 text-[11px] text-charcoal-muted">주문번호를 메모해두시면 비회원 주문 조회 시 사용할 수 있습니다.</p>
+                <button
+                  onClick={() => {
+                    const text = orderNumbers.length === 1 ? orderNumbers[0] : orderNumbers.join(", ");
+                    navigator.clipboard.writeText(text).then(() => {
+                      setCopiedIdx(-1);
+                      setTimeout(() => setCopiedIdx(null), 2000);
+                    });
+                  }}
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-birch-200 bg-white px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:bg-birch-100"
+                >
+                  {copiedIdx === -1 ? <Check size={13} className="text-green-600" /> : <Copy size={13} />}
+                  {copiedIdx === -1 ? "복사됨" : "모두 복사하기"}
+                </button>
               </div>
             )}
           </div>
@@ -209,16 +227,16 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
           <div className="mt-10 rounded-3xl border border-birch-200 bg-white p-6 sm:p-8">
             <div className="flex items-end justify-between border-b border-birch-200 pb-4">
               <span className="text-sm text-charcoal-muted">총 결제 금액</span>
-              <span className="font-serif text-3xl font-bold text-charcoal">{formatWon(total)}</span>
+              <span className="font-serif text-3xl font-bold text-charcoal">{formatWon(finalTotal)}</span>
             </div>
 
-            {bankAccounts.length > 0 ? (
+            {validBankAccounts.length > 0 ? (
               <div className="mt-6 space-y-3">
                 <div className="flex items-center gap-2">
                   <Building2 size={16} className="text-birch-500" />
                   <h3 className="text-sm font-semibold text-charcoal">입금 계좌 안내</h3>
                 </div>
-                {bankAccounts.map((acc, idx) => (
+                {validBankAccounts.map((acc, idx) => (
                   <div key={acc.id} className="rounded-xl border border-birch-200 bg-birch-50/60 p-4">
                     <div className="flex items-center justify-between">
                       <div>
@@ -380,14 +398,24 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
               <p className="mt-1.5 text-xs text-red-600">{phoneError}</p>
             )}
           </Field>
-          <Field label="우편번호" optional>
-            <input type="text" value={customer.postcode} onChange={(e) => setCustomer({ ...customer, postcode: e.target.value })} placeholder="예: 06236" className="input-field" />
-          </Field>
-          <Field label="배송 주소">
-            <input type="text" value={customer.address} onChange={(e) => setCustomer({ ...customer, address: e.target.value })} placeholder="도로명 주소" className="input-field" />
-          </Field>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-charcoal">배송 주소</label>
+            <div className="flex gap-2">
+              <input type="text" value={customer.postcode} onChange={(e) => setCustomer({ ...customer, postcode: e.target.value })} placeholder="우편번호" className="input-field w-32" readOnly />
+              <input type="text" value={customer.address} onChange={(e) => setCustomer({ ...customer, address: e.target.value })} placeholder="도로명 주소" className="input-field flex-1" readOnly />
+              <button
+                type="button"
+                onClick={() => postcode.open((data) => setCustomer({ ...customer, postcode: data.zonecode, address: data.address }))}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-charcoal px-4 text-sm font-medium text-ivory transition-all hover:bg-charcoal-light active:scale-[0.98]"
+              >
+                <Search size={15} />
+                주소 검색
+              </button>
+            </div>
+            <p className="mt-1.5 text-xs text-charcoal-muted">주소 검색 버튼을 눌러 도로명 주소를 검색하면 우편번호가 자동으로 입력됩니다.</p>
+          </div>
           <Field label="상세 주소">
-            <input type="text" value={customer.detailAddress} onChange={(e) => setCustomer({ ...customer, detailAddress: e.target.value })} placeholder="동, 호수 등" className="input-field" />
+            <input type="text" value={customer.detailAddress} onChange={(e) => setCustomer({ ...customer, detailAddress: e.target.value })} placeholder="동, 호수 등 (직접 입력)" className="input-field" />
           </Field>
           <Field label="메모" optional>
             <textarea value={customer.memo} onChange={(e) => setCustomer({ ...customer, memo: e.target.value })} rows={3} placeholder="요청사항" className="input-field resize-none" />
@@ -475,6 +503,29 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
           {BRAND.nameKr}는 주문제작 상품으로, 제작 시작 후에는 취소가 어려울 수 있습니다.
         </p>
       </div>
+
+      {postcode.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-4 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MapPin size={18} className="text-birch-600" />
+                <span className="text-sm font-semibold text-charcoal">도로명 주소 검색</span>
+              </div>
+              <button onClick={postcode.close} className="rounded-lg p-1.5 text-charcoal-muted transition-colors hover:bg-birch-50">
+                <X size={18} />
+              </button>
+            </div>
+            {postcode.loading ? (
+              <div className="flex h-96 items-center justify-center">
+                <Loader2 size={28} className="animate-spin text-birch-400" />
+              </div>
+            ) : (
+              <div ref={postcode.containerRef} className="h-96 w-full overflow-hidden rounded-lg" />
+            )}
+          </div>
+        </div>
+      )}
     </main>
   );
 }
