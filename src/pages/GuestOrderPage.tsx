@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Search, Loader2, Package, XCircle, ArrowLeft, X, AlertCircle, Building2, Copy, Check } from "lucide-react";
 import { fetchOrderByNumber, cancelOrderWithRefund, cancelCardOrder, fetchSettings } from "@/lib/api";
+import { copyToClipboard } from "@/lib/clipboard";
 import { formatWon } from "@/lib/pricing";
 import { BRAND } from "@/config/brand";
 import type { OrderRow, BankAccount } from "@/types/database";
@@ -52,12 +53,11 @@ export function GuestOrderPage({ onNavigate }: GuestOrderPageProps) {
   const validBankAccounts = bankAccounts.filter((a) => a.bank.trim() && a.accountNumber.trim() && a.accountHolder.trim());
   const showBankAccounts = order?.payment_method === "bank_transfer" && order?.status === "payment_pending" && validBankAccounts.length > 0;
 
-  const handleCopyAccount = (acc: BankAccount, idx: number) => {
+  const handleCopyAccount = async (acc: BankAccount, idx: number) => {
     const text = `${acc.bank} ${acc.accountNumber} ${acc.accountHolder}`;
-    navigator.clipboard.writeText(text).then(() => {
-      setCopiedIdx(idx);
-      setTimeout(() => setCopiedIdx(null), 2000);
-    });
+    await copyToClipboard(text);
+    setCopiedIdx(idx);
+    setTimeout(() => setCopiedIdx(null), 2000);
   };
 
   const handleSearch = async () => {

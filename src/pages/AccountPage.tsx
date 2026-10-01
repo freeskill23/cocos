@@ -3,6 +3,7 @@ import { LogOut, Mail, Loader2, Package, ChevronRight, XCircle, X, Truck, Search
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { cancelOrderWithRefund, cancelCardOrder, fetchSettings } from "@/lib/api";
+import { copyToClipboard } from "@/lib/clipboard";
 import { BRAND } from "@/config/brand";
 import { formatWon } from "@/lib/pricing";
 import type { OrderRow, BankAccount } from "@/types/database";
@@ -421,12 +422,11 @@ function OrderDetailModal({
   const validBankAccounts = bankAccounts.filter((a) => a.bank.trim() && a.accountNumber.trim() && a.accountHolder.trim());
   const showBankAccounts = order.payment_method === "bank_transfer" && order.status === "payment_pending" && validBankAccounts.length > 0;
 
-  const handleCopyAccount = (acc: BankAccount, idx: number) => {
+  const handleCopyAccount = async (acc: BankAccount, idx: number) => {
     const text = `${acc.bank} ${acc.accountNumber} ${acc.accountHolder}`;
-    navigator.clipboard.writeText(text).then(() => {
-      setCopiedIdx(idx);
-      setTimeout(() => setCopiedIdx(null), 2000);
-    });
+    await copyToClipboard(text);
+    setCopiedIdx(idx);
+    setTimeout(() => setCopiedIdx(null), 2000);
   };
 
   return (
