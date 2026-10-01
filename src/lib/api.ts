@@ -403,6 +403,39 @@ export async function cancelOrder(id: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function cancelOrderWithRefund(
+  id: string,
+  refundBank: string,
+  refundAccountNumber: string,
+  refundAccountHolder: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("orders")
+    .update({
+      status: "cancelled",
+      refund_bank: refundBank,
+      refund_account_number: refundAccountNumber,
+      refund_account_holder: refundAccountHolder,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .in("status", ["payment_pending", "paid"]);
+  if (error) throw error;
+}
+
+export async function cancelCardOrder(id: string, cancelReason: string): Promise<void> {
+  const { error } = await supabase
+    .from("orders")
+    .update({
+      status: "cancelled",
+      card_cancel_reason: cancelReason,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .in("status", ["payment_pending", "paid"]);
+  if (error) throw error;
+}
+
 export async function upsertPortfolioItem(item: Partial<PortfolioRow> & { dog_name: string; breed: string; weight: string; size: string; note: string }): Promise<void> {
   const { error } = await supabase.from("portfolio_items").upsert(item);
   if (error) throw error;

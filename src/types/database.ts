@@ -81,6 +81,10 @@ export interface OrderRow {
   shipping_company: string | null;
   tracking_number: string | null;
   shipped_at: string | null;
+  refund_bank: string | null;
+  refund_account_number: string | null;
+  refund_account_holder: string | null;
+  card_cancel_reason: string | null;
   created_at: string;
   updated_at: string;
 }

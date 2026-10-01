@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Search, Loader2, Package, XCircle, ArrowLeft } from "lucide-react";
-import { fetchOrderByNumber, cancelOrder } from "@/lib/api";
+import { Search, Loader2, Package, XCircle, ArrowLeft, X, AlertCircle } from "lucide-react";
+import { fetchOrderByNumber, cancelOrderWithRefund, cancelCardOrder } from "@/lib/api";
 import { formatWon } from "@/lib/pricing";
 import { BRAND } from "@/config/brand";
 import type { OrderRow } from "@/types/database";
@@ -27,12 +27,19 @@ const statusColors: Record<string, string> = {
   cancelled: "bg-red-100 text-red-700",
 };
 
+const BANK_LIST = [
+  "국민은행", "신한은행", "우리은행", "하나은행", "농협은행", "기업은행",
+  "SC제일은행", "씨티은행", "대구은행", "부산은행", "광주은행", "전북은행",
+  "경남은행", "제주은행", "새마을금고", "신협", "우체국", "수협", "케이뱅크", "토스뱅크",
+];
+
 export function GuestOrderPage({ onNavigate }: GuestOrderPageProps) {
   const [orderNumber, setOrderNumber] = useState("");
   const [order, setOrder] = useState<OrderRow | null>(null);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
   const handleSearch = async () => {
     if (!orderNumber.trim()) return;
@@ -53,13 +60,27 @@ export function GuestOrderPage({ onNavigate }: GuestOrderPageProps) {
     }
   };
 
-  const handleCancel = async () => {
+  const handleCancelBankTransfer = async (refundBank: string, refundAccountNumber: string, refundAccountHolder: string) => {
     if (!order) return;
-    if (!confirm("정말 이 주문을 취소하시겠습니까? 제작이 시작되기 전에만 취소할 수 있습니다.")) return;
     setCancelling(true);
     try {
-      await cancelOrder(order.id);
-      setOrder({ ...order, status: "cancelled" });
+      await cancelOrderWithRefund(order.id, refundBank, refundAccountNumber, refundAccountHolder);
+      setOrder({ ...order, status: "cancelled", refund_bank: refundBank, refund_account_number: refundAccountNumber, refund_account_holder: refundAccountHolder });
+      setShowCancelModal(false);
+    } catch {
+      alert("주문 취소에 실패했습니다. 이미 제작이 시작되었을 수 있습니다.");
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const handleCancelCard = async () => {
+    if (!order) return;
+    setCancelling(true);
+    try {
+      await cancelCardOrder(order.id, "고객 주문 취소 요청");
+      setOrder({ ...order, status: "cancelled", card_cancel_reason: "고객 주문 취소 요청" });
+      setShowCancelModal(false);
     } catch {
       alert("주문 취소에 실패했습니다. 이미 제작이 시작되었을 수 있습니다.");
     } finally {
@@ -124,9 +145,16 @@ export function GuestOrderPage({ onNavigate }: GuestOrderPageProps) {
                       {new Date(order.created_at).toLocaleDateString("ko-KR")} {new Date(order.created_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
                     </p>
                   </div>
-                  <span className={`rounded-full px-3 py-1 text-xs font-medium ${statusColors[order.status] ?? "bg-birch-100 text-charcoal"}`}>
-                    {statusLabels[order.status] ?? order.status}
-                  </span>
+                  <div className="flex flex-col items-end gap-1.5">
+                    <span className={`rounded-full px-3 py-1 text-xs font-medium ${statusColors[order.status] ?? "bg-birch-100 text-charcoal"}`}>
+                      {statusLabels[order.status] ?? order.status}
+                    </span>
+                    {order.payment_method && (
+                      <span className="rounded-full bg-birch-50 px-2.5 py-0.5 text-[10px] text-charcoal-muted">
+                        {order.payment_method === "card" ? "카드 결제" : "무통장입금"}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -172,9 +200,36 @@ export function GuestOrderPage({ onNavigate }: GuestOrderPageProps) {
                 </div>
               </div>
 
+              {order.status === "cancelled" && order.refund_bank && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                  <h3 className="text-xs font-semibold text-amber-800">환불 계좌 정보</h3>
+                  <div className="mt-3 space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-amber-700">은행</span>
+                      <span className="font-medium text-charcoal">{order.refund_bank}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-amber-700">계좌번호</span>
+                      <span className="font-medium text-charcoal">{order.refund_account_number}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-amber-700">예금주</span>
+                      <span className="font-medium text-charcoal">{order.refund_account_holder}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {order.status === "cancelled" && order.card_cancel_reason && (
+                <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+                  <h3 className="text-xs font-semibold text-blue-800">카드 결제 취소</h3>
+                  <p className="mt-2 text-sm text-blue-700">취소 사유: {order.card_cancel_reason}</p>
+                </div>
+              )}
+
               {canCancel && (
                 <button
-                  onClick={handleCancel}
+                  onClick={() => setShowCancelModal(true)}
                   disabled={cancelling}
                   className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-red-300 bg-white py-3.5 text-sm font-medium text-red-600 transition-all hover:bg-red-50 active:scale-[0.98] disabled:opacity-50"
                 >
@@ -187,7 +242,7 @@ export function GuestOrderPage({ onNavigate }: GuestOrderPageProps) {
                 </button>
               )}
 
-              {order.status === "cancelled" && (
+              {order.status === "cancelled" && !order.refund_bank && !order.card_cancel_reason && (
                 <div className="rounded-xl bg-red-50 px-4 py-3 text-center text-sm text-red-700">
                   취소된 주문입니다.
                 </div>
@@ -203,6 +258,144 @@ export function GuestOrderPage({ onNavigate }: GuestOrderPageProps) {
           )}
         </div>
       </div>
+
+      {showCancelModal && order && (
+        <CancelModal
+          order={order}
+          cancelling={cancelling}
+          onClose={() => setShowCancelModal(false)}
+          onCancelBankTransfer={handleCancelBankTransfer}
+          onCancelCard={handleCancelCard}
+        />
+      )}
     </main>
+  );
+}
+
+function CancelModal({
+  order,
+  cancelling,
+  onClose,
+  onCancelBankTransfer,
+  onCancelCard,
+}: {
+  order: OrderRow;
+  cancelling: boolean;
+  onClose: () => void;
+  onCancelBankTransfer: (bank: string, number: string, holder: string) => void;
+  onCancelCard: () => void;
+}) {
+  const isCard = order.payment_method === "card";
+  const [refundBank, setRefundBank] = useState("");
+  const [refundAccountNumber, setRefundAccountNumber] = useState("");
+  const [refundAccountHolder, setRefundAccountHolder] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = () => {
+    if (isCard) {
+      onCancelCard();
+      return;
+    }
+    if (!refundBank || !refundAccountNumber.trim() || !refundAccountHolder.trim()) {
+      setError("은행, 계좌번호, 예금주를 모두 입력해주세요.");
+      return;
+    }
+    setError(null);
+    onCancelBankTransfer(refundBank, refundAccountNumber.trim(), refundAccountHolder.trim());
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-charcoal/40 backdrop-blur-sm sm:items-center" onClick={onClose}>
+      <div
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-6 shadow-xl sm:rounded-3xl sm:p-8"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={20} className="text-red-500" />
+            <h2 className="font-serif text-lg text-charcoal">주문 취소</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-charcoal-muted transition-colors hover:bg-birch-100"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {order.order_number && (
+          <p className="mt-2 font-mono text-sm text-charcoal-muted">{order.order_number}</p>
+        )}
+
+        <div className="mt-4 rounded-xl bg-birch-50 px-4 py-3 text-sm text-charcoal">
+          <p>상품: {order.product_name ?? "-"}</p>
+          <p className="mt-1">결제 방법: {isCard ? "카드 결제" : "무통장입금"}</p>
+          <p className="mt-1">결제 금액: {formatWon(order.total_price)}</p>
+        </div>
+
+        {isCard ? (
+          <div className="mt-4 rounded-xl bg-blue-50 px-4 py-3 text-sm leading-relaxed text-blue-800">
+            카드 결제 주문을 취소하면 결제가 자동으로 취소됩니다.
+            <br />
+            취소 처리까지 영업일 기준 1~3일이 소요될 수 있습니다.
+          </div>
+        ) : (
+          <div className="mt-4">
+            <p className="text-sm text-charcoal-muted">
+              환불받으실 계좌 정보를 입력해주세요. 확인 후 입금해드립니다.
+            </p>
+            <div className="mt-3 space-y-3">
+              <div>
+                <label className="text-xs font-medium text-charcoal-muted">환불 은행</label>
+                <select
+                  value={refundBank}
+                  onChange={(e) => setRefundBank(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-birch-200 bg-white px-4 py-2.5 text-sm text-charcoal focus:border-birch-400 focus:outline-none focus:ring-2 focus:ring-birch-200"
+                >
+                  <option value="">은행 선택</option>
+                  {BANK_LIST.map((b) => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-charcoal-muted">계좌번호</label>
+                <input
+                  type="text"
+                  value={refundAccountNumber}
+                  onChange={(e) => setRefundAccountNumber(e.target.value)}
+                  placeholder="'-' 없이 숫자만 입력"
+                  className="mt-1 w-full rounded-xl border border-birch-200 bg-white px-4 py-2.5 text-sm text-charcoal focus:border-birch-400 focus:outline-none focus:ring-2 focus:ring-birch-200"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-charcoal-muted">예금주</label>
+                <input
+                  type="text"
+                  value={refundAccountHolder}
+                  onChange={(e) => setRefundAccountHolder(e.target.value)}
+                  placeholder="예금주명"
+                  className="mt-1 w-full rounded-xl border border-birch-200 bg-white px-4 py-2.5 text-sm text-charcoal focus:border-birch-400 focus:outline-none focus:ring-2 focus:ring-birch-200"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
+
+        <div className="mt-6 flex gap-3">
+          <button onClick={onClose} className="btn-outline flex-1">취소</button>
+          <button
+            onClick={handleSubmit}
+            disabled={cancelling}
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-red-600 px-6 py-3 text-sm font-medium text-white transition-all hover:bg-red-700 active:scale-[0.98] disabled:opacity-50"
+          >
+            {cancelling ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={16} />}
+            {isCard ? "결제 취소하기" : "주문 취소하기"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

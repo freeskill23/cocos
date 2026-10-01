@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Menu, X, ShoppingBag, User, LogOut, Settings } from "lucide-react";
+import { Menu, X, ShoppingBag, User, LogOut, Settings, Search } from "lucide-react";
 import { BRAND } from "@/config/brand";
 import { useCart } from "@/hooks/useCart";
 import { useAuth } from "@/hooks/useAuth";
@@ -164,6 +164,13 @@ export function Navbar({ onNavigate, currentPath }: NavbarProps) {
                   내 정보 관리
                 </button>
                 <button
+                  onClick={() => handleNavClick("/guest-order")}
+                  className="flex items-center gap-2 rounded-xl px-4 py-3.5 text-left text-base font-medium text-charcoal-muted transition-colors hover:bg-birch-100"
+                >
+                  <Search size={18} />
+                  주문번호로 조회
+                </button>
+                <button
                   onClick={handleLogout}
                   className="flex items-center gap-2 rounded-xl px-4 py-3.5 text-left text-base font-medium text-charcoal transition-colors hover:bg-birch-100"
                 >
@@ -181,8 +188,9 @@ export function Navbar({ onNavigate, currentPath }: NavbarProps) {
                 </button>
                 <button
                   onClick={() => handleNavClick("/guest-order")}
-                  className="rounded-xl px-4 py-3.5 text-left text-base font-medium text-charcoal-muted transition-colors hover:bg-birch-100"
+                  className="flex items-center gap-2 rounded-xl px-4 py-3.5 text-left text-base font-medium text-charcoal-muted transition-colors hover:bg-birch-100"
                 >
+                  <Search size={18} />
                   비회원 주문 조회
                 </button>
               </>

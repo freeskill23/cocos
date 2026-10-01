@@ -472,6 +472,26 @@ function OrderCard({
                 </div>
               )}
 
+              {status === "cancelled" && order.refund_bank && (
+                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <h4 className="text-xs font-semibold text-amber-800">환불 계좌 정보</h4>
+                  <div className="mt-2 space-y-1.5 text-sm">
+                    <DetailRow label="은행" value={order.refund_bank} />
+                    <DetailRow label="계좌번호" value={order.refund_account_number ?? "-"} />
+                    <DetailRow label="예금주" value={order.refund_account_holder ?? "-"} />
+                  </div>
+                </div>
+              )}
+
+              {status === "cancelled" && order.card_cancel_reason && (
+                <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3">
+                  <h4 className="text-xs font-semibold text-blue-800">카드 결제 취소</h4>
+                  <div className="mt-2 space-y-1.5 text-sm">
+                    <DetailRow label="취소 사유" value={order.card_cancel_reason} />
+                  </div>
+                </div>
+              )}
+
               {/* Action buttons based on status */}
               <div className="mt-5 space-y-3">
                 {status === "payment_pending" && order.payment_method === "bank_transfer" && (
