@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useRouter } from "@/lib/router";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { CartProvider } from "@/hooks/useCart";
