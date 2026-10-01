@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { LogOut, Mail, Loader2, Package, ChevronRight, XCircle, X, Truck, Search, AlertCircle, Building2, Copy, Check } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
-import { cancelOrderWithRefund, cancelCardOrder } from "@/lib/api";
+import { cancelOrderWithRefund, cancelCardOrder, fetchSettings } from "@/lib/api";
 import { BRAND } from "@/config/brand";
 import { formatWon } from "@/lib/pricing";
 import type { OrderRow, BankAccount } from "@/types/database";
