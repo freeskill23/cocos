@@ -103,8 +103,11 @@ export function AccountPage({ onNavigate }: AccountPageProps) {
   }
 
   if (!session) {
-    onNavigate("/auth");
-    return null;
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-ivory pt-20">
+        <RedirectToAuth onNavigate={onNavigate} />
+      </main>
+    );
   }
 
   const statusLabels: Record<string, string> = {
@@ -587,4 +590,11 @@ function DetailRow({ label, value }: { label: string; value: string }) {
       <span className="text-right font-medium text-charcoal">{value}</span>
     </div>
   );
+}
+
+function RedirectToAuth({ onNavigate }: { onNavigate: (to: string) => void }) {
+  useEffect(() => {
+    onNavigate("/auth");
+  }, [onNavigate]);
+  return <Loader2 size={28} className="animate-spin text-birch-400" />;
 }
