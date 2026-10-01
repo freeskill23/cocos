@@ -18,11 +18,16 @@ import { AdminLogin } from "@/pages/AdminLogin";
 import { AdminDashboard } from "@/pages/AdminDashboard";
 import { BusinessInfoPage, PrivacyPage, RefundPolicyPage } from "@/pages/LegalPages";
 import { Loader2 } from "lucide-react";
+import { trackVisit } from "@/lib/analytics";
 
 function AppRoutes() {
   const { path, navigate } = useRouter();
   const { session, loading } = useAuth();
   useSEO(path);
+
+  useEffect(() => {
+    if (!path.startsWith("/admin")) void trackVisit();
+  }, [path]);
 
   const isAdmin = path.startsWith("/admin");
   const isAdminLogin = path === "/admin/login";

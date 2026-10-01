@@ -3,6 +3,7 @@ import { Check, PartyPopper, ArrowRight, Loader2, AlertCircle, Search, MapPin, X
 import { StepHeader, Field } from "@/components/custom/Step1Product";
 import { calculatePrice, formatWon } from "@/lib/pricing";
 import { insertOrder } from "@/lib/api";
+import { trackConversion } from "@/lib/analytics";
 import { supabase } from "@/lib/supabase";
 import { useDaumPostcode } from "@/components/DaumPostcode";
 import { BRAND } from "@/config/brand";
@@ -107,6 +108,7 @@ export function Step3Order({
         memo: customer.memo.trim() || null,
       });
       if (insertedId) {
+        void trackConversion(insertedId, grandTotal);
         const { data: inserted } = await supabase.from("orders").select("order_number").eq("id", insertedId).single();
         if (inserted?.order_number) setOrderNumber(inserted.order_number);
       }

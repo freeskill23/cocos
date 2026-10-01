@@ -7,6 +7,7 @@ import { formatWon } from "@/lib/pricing";
 import { BRAND } from "@/config/brand";
 import { requestCardPayment } from "@/lib/portone";
 import { supabase } from "@/lib/supabase";
+import { trackConversion } from "@/lib/analytics";
 import { useDaumPostcode } from "@/components/DaumPostcode";
 import type { BankAccount, PortOneConfig } from "@/types/database";
 
@@ -111,6 +112,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
           };
           const insertedId = await insertOrder(order);
           if (insertedId) {
+            void trackConversion(insertedId, item.unit_price * item.quantity);
             const { data: inserted } = await supabase.from("orders").select("order_number").eq("id", insertedId).single();
             if (inserted?.order_number) createdNumbers.push(inserted.order_number);
           }
@@ -162,6 +164,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
           };
           const insertedId = await insertOrder(order);
           if (insertedId) {
+            void trackConversion(insertedId, item.unit_price * item.quantity);
             const { data: inserted } = await supabase.from("orders").select("order_number").eq("id", insertedId).single();
             if (inserted?.order_number) createdNumbers.push(inserted.order_number);
           }

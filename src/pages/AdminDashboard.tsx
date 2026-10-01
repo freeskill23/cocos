@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { LogOut, LayoutDashboard, Package, Boxes, Images, Star, Settings, Menu, X, Tag } from "lucide-react";
+import { LogOut, LayoutDashboard, Package, Boxes, Images, Star, Settings, Menu, X, Tag, BarChart3 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { BRAND } from "@/config/brand";
@@ -9,13 +9,14 @@ import { CategoriesTab } from "@/components/admin/CategoriesTab";
 import { PortfolioTab } from "@/components/admin/PortfolioTab";
 import { ReviewsTab } from "@/components/admin/ReviewsTab";
 import { SettingsTab } from "@/components/admin/SettingsTab";
+import { AnalyticsTab } from "@/components/admin/AnalyticsTab";
 
-type TabId = "dashboard" | "orders" | "products" | "categories" | "portfolio" | "reviews" | "settings";
+type TabId = "dashboard" | "orders" | "products" | "categories" | "portfolio" | "reviews" | "analytics" | "settings";
 
 function tabFromPath(path: string): TabId {
   const match = path.match(/^\/admin\/?(\w*)/);
   const segment = match?.[1];
-  const valid: TabId[] = ["dashboard", "orders", "products", "categories", "portfolio", "reviews", "settings"];
+  const valid: TabId[] = ["dashboard", "orders", "products", "categories", "portfolio", "reviews", "analytics", "settings"];
   return (valid.includes(segment as TabId) ? segment : "dashboard") as TabId;
 }
 
@@ -42,6 +43,7 @@ export function AdminDashboard({ onNavigate, path }: AdminDashboardProps) {
     { id: "categories", label: "카테고리", icon: Tag },
     { id: "portfolio", label: "포트폴리오", icon: Images },
     { id: "reviews", label: "후기 관리", icon: Star },
+    { id: "analytics", label: "로그 분석", icon: BarChart3 },
     { id: "settings", label: "설정", icon: Settings },
   ];
 
@@ -123,6 +125,7 @@ export function AdminDashboard({ onNavigate, path }: AdminDashboardProps) {
           {tab === "categories" && <CategoriesTab />}
           {tab === "portfolio" && <PortfolioTab />}
           {tab === "reviews" && <ReviewsTab />}
+          {tab === "analytics" && <AnalyticsTab />}
           {tab === "settings" && <SettingsTab />}
         </main>
       </div>
