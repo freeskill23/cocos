@@ -423,6 +423,20 @@ export async function cancelOrderWithRefund(
   if (error) throw error;
 }
 
+export async function completeRefund(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("orders")
+    .update({
+      refund_bank: null,
+      refund_account_number: null,
+      refund_account_holder: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .eq("status", "cancelled");
+  if (error) throw error;
+}
+
 export async function cancelCardOrder(id: string, cancelReason: string): Promise<void> {
   const { error } = await supabase
     .from("orders")

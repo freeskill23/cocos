@@ -33,8 +33,12 @@ export function CardPaymentResult({ merchantId, onNavigate }: CardPaymentResultP
         const urlParams = new URLSearchParams(window.location.search);
         const paymentStatus = urlParams.get("status");
         const paymentId = urlParams.get("paymentId");
+        const errorCode = urlParams.get("code");
 
-        if (paymentStatus === "PAID" || (data.status === "paid" && !paymentId)) {
+        if (errorCode) {
+          setStatus("failed");
+          setError("결제가 실패했습니다. 다시 시도해주세요.");
+        } else if (paymentStatus === "PAID" || (paymentId && !errorCode)) {
           if (paymentId && data.portone_payment_id !== paymentId) {
             await confirmCardPayment(data.id, paymentId);
           }

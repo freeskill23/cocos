@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Loader2, Check, ArrowRight, User, Mail, Lock, Copy, Building2, Info, CreditCard, Search, MapPin, X } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 import { useAuth } from "@/hooks/useAuth";
-import { insertOrder, fetchSettings, type OrderInsert } from "@/lib/api";
+import { insertOrder, fetchSettings, confirmCardPayment, type OrderInsert } from "@/lib/api";
 import { formatWon } from "@/lib/pricing";
 import { BRAND } from "@/config/brand";
 import { requestCardPayment } from "@/lib/portone";
@@ -119,7 +119,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
 
         const orderNames = checkoutItems.map((i) => `${i.product_name} × ${i.quantity}`).join(", ");
         const firstMerchantId = merchantIds[0];
-        const redirectUrl = `${window.location.origin}/pay/card/${firstMerchantId}`;
+        const redirectUrl = `${window.location.origin}/#/pay/card/${firstMerchantId}`;
 
         const result = await requestCardPayment({
           storeId: portoneConfig.storeId,
@@ -133,11 +133,12 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
           redirectUrl,
         });
 
-        if (result.status === "PAID") {
+        if (result && "paymentId" in result && !result.code) {
+          await confirmCardPaymentByMerchant(firstMerchantId, result.paymentId);
           if (buyNowItem) { clearBuyNow(); } else { await clear(); }
           onNavigate(`/pay/card/${firstMerchantId}`);
-        } else if (result.status === "FAILED") {
-          setSubmitError("결제가 실패했습니다. 다시 시도해주세요.");
+        } else {
+          setSubmitError(result?.message ?? "결제가 실패했습니다. 다시 시도해주세요.");
         }
       } else {
         const createdNumbers: string[] = [];
@@ -417,8 +418,8 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
           <Field label="상세 주소">
             <input type="text" value={customer.detailAddress} onChange={(e) => setCustomer({ ...customer, detailAddress: e.target.value })} placeholder="동, 호수 등 (직접 입력)" className="input-field" />
           </Field>
-          <Field label="메모" optional>
-            <textarea value={customer.memo} onChange={(e) => setCustomer({ ...customer, memo: e.target.value })} rows={3} placeholder="요청사항" className="input-field resize-none" />
+          <Field label="메모 (각인, 이름 등 요청사항을 자유롭게 입력해주세요)">
+            <textarea value={customer.memo} onChange={(e) => setCustomer({ ...customer, memo: e.target.value })} rows={3} placeholder="각인, 이름 등 요청사항을 자유롭게 입력해주세요." className="input-field resize-none" />
           </Field>
         </div>
 
@@ -528,6 +529,17 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
       )}
     </main>
   );
+}
+
+async function confirmCardPaymentByMerchant(merchantId: string, paymentId: string): Promise<void> {
+  const { data, error } = await supabase
+    .from("orders")
+    .select("id")
+    .eq("portone_merchant_id", merchantId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("주문 정보를 찾을 수 없습니다.");
+  await confirmCardPayment(data.id, paymentId);
 }
 
 function Field({ label, children, optional }: { label: string; children: React.ReactNode; optional?: boolean }) {

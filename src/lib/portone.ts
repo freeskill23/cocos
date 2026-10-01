@@ -17,7 +17,7 @@ export interface RequestCardPaymentParams {
 
 export async function requestCardPayment(
   params: RequestCardPaymentParams
-) {
+): Promise<PortOne.PaymentResponse | undefined> {
   return PortOne.requestPayment({
     storeId: params.storeId,
     channelKey: params.channelKey,

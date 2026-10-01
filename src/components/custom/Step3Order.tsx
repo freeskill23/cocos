@@ -242,11 +242,11 @@ export function Step3Order({
             />
           </Field>
 
-          <Field label="메모" optional>
+          <Field label="메모 (각인, 이름 등 요청사항을 자유롭게 입력해주세요)">
             <textarea
               value={customer.memo}
               onChange={(e) => update("memo", e.target.value)}
-              placeholder="요청사항을 자유롭게 적어주세요."
+              placeholder="각인, 이름 등 요청사항을 자유롭게 입력해주세요."
               rows={3}
               className="input-field resize-none"
             />

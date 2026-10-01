@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { Trash2, ChevronDown, ChevronUp, Loader2, RefreshCw, Copy, Check, Printer, Save, Truck, CheckCircle2, Hammer, XCircle } from "lucide-react";
-import { fetchAllOrders, updateOrderStatus, updateOrderMemo, deleteOrder, bulkDeleteOrders, updateOrderShipping, autoCompleteShippedOrders } from "@/lib/api";
+import { fetchAllOrders, updateOrderStatus, updateOrderMemo, deleteOrder, bulkDeleteOrders, updateOrderShipping, autoCompleteShippedOrders, completeRefund } from "@/lib/api";
 import type { OrderRow } from "@/types/database";
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, SHIPPING_COMPANIES, type OrderStatus } from "@/lib/supabase";
 import { formatWon } from "@/lib/pricing";
@@ -73,6 +73,16 @@ export function OrdersTab({ onCountChange }: OrdersTabProps) {
       setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, memo } : o)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "메모 저장에 실패했습니다.");
+    }
+  };
+
+  const handleRefundComplete = async (id: string) => {
+    if (!confirm("환불 처리를 완료하시겠습니까? 환불 계좌 정보가 삭제됩니다.")) return;
+    try {
+      await completeRefund(id);
+      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, refund_bank: null, refund_account_number: null, refund_account_holder: null } : o)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "환불 완료 처리에 실패했습니다.");
     }
   };
 
@@ -210,6 +220,7 @@ export function OrdersTab({ onCountChange }: OrdersTabProps) {
               onShipping={handleShipping}
               onDelete={handleDelete}
               onMemoSave={handleMemoSave}
+              onRefundComplete={handleRefundComplete}
             />
           ))}
         </div>
@@ -249,6 +260,7 @@ function OrderCard({
   onShipping,
   onDelete,
   onMemoSave,
+  onRefundComplete,
 }: {
   order: OrderRow;
   expanded: boolean;
@@ -259,6 +271,7 @@ function OrderCard({
   onShipping: (id: string, company: string, tracking: string) => void;
   onDelete: (id: string) => void;
   onMemoSave: (id: string, memo: string) => void;
+  onRefundComplete: (id: string) => void;
 }) {
   const status = order.status as OrderStatus;
   const created = new Date(order.created_at);
@@ -480,6 +493,15 @@ function OrderCard({
                     <DetailRow label="계좌번호" value={order.refund_account_number ?? "-"} />
                     <DetailRow label="예금주" value={order.refund_account_holder ?? "-"} />
                   </div>
+                  {order.payment_method === "bank_transfer" && (
+                    <button
+                      onClick={() => onRefundComplete(order.id)}
+                      className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-700"
+                    >
+                      <CheckCircle2 size={15} />
+                      환불 완료
+                    </button>
+                  )}
                 </div>
               )}
 
