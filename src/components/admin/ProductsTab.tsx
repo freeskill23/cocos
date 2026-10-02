@@ -311,10 +311,10 @@ function ProductEditor({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSizeStep(5000)}
-                    className={`rounded-lg border-2 px-3 py-2 text-xs font-medium transition-all ${sizeStep === 5000 ? "border-charcoal bg-charcoal text-ivory" : "border-birch-200 bg-white text-charcoal hover:border-birch-400"}`}
+                    onClick={() => setSizeStep(5)}
+                    className={`rounded-lg border-2 px-3 py-2 text-xs font-medium transition-all ${sizeStep === 5 ? "border-charcoal bg-charcoal text-ivory" : "border-birch-200 bg-white text-charcoal hover:border-birch-400"}`}
                   >
-                    5m
+                    5mm
                   </button>
                 </div>
               </div>

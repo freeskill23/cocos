@@ -27,9 +27,9 @@ export function Step2Size({ product, dimensions, onChange, sizes, pricing, onNex
     <div>
       <StepHeader
         title="사이즈"
-        desc={step === 5000
-          ? "가로 · 세로 · 높이를 조정하세요. 5m 단위로 가격이 반영됩니다."
-          : "가로 · 세로 · 높이를 조정하세요. 1cm 단위로 가격이 반영됩니다."
+        desc={step === 5
+          ? "가로 · 세로 · 높이를 조정하세요. 5mm 단위로 가격이 반영됩니다."
+          : "가로 · 세로 · 높이를 조정하세요. 10mm 단위로 가격이 반영됩니다."
         }
       />
 
