@@ -1,6 +1,5 @@
 import { WizardNav } from "@/components/WizardNav";
 import { SizePreview } from "@/components/SizePreview";
-import { SLIDER_STEP } from "@/config/sizes";
 import { StepHeader, Field } from "@/components/custom/Step1Product";
 import { calculatePrice, formatWon } from "@/lib/pricing";
 import type { PricingSettings, SizeSettings } from "@/config/pricing";
@@ -17,6 +16,7 @@ interface Step2Props {
 }
 
 export function Step2Size({ product, dimensions, onChange, sizes, pricing, onNext, onBack }: Step2Props) {
+  const step = product.size_step ?? 10;
   const breakdown = calculatePrice({
     product,
     dimensions,
@@ -27,7 +27,10 @@ export function Step2Size({ product, dimensions, onChange, sizes, pricing, onNex
     <div>
       <StepHeader
         title="사이즈"
-        desc="가로 · 세로 · 높이를 조정하세요. 1cm 단위로 가격이 반영됩니다."
+        desc={step === 5000
+          ? "가로 · 세로 · 높이를 조정하세요. 5m 단위로 가격이 반영됩니다."
+          : "가로 · 세로 · 높이를 조정하세요. 1cm 단위로 가격이 반영됩니다."
+        }
       />
 
       <div className="mt-8 grid gap-8 lg:grid-cols-2">
@@ -39,6 +42,7 @@ export function Step2Size({ product, dimensions, onChange, sizes, pricing, onNex
             min={sizes.minWidth}
             max={sizes.maxWidth}
             perCm={pricing.perCmWidth}
+            step={step}
             onChange={(v) => onChange({ width: v, depth: dimensions.depth, height: dimensions.height })}
           />
           <SizeInput
@@ -48,6 +52,7 @@ export function Step2Size({ product, dimensions, onChange, sizes, pricing, onNex
             min={sizes.minDepth}
             max={sizes.maxDepth}
             perCm={pricing.perCmDepth}
+            step={step}
             onChange={(v) => onChange({ width: dimensions.width, depth: v, height: dimensions.height })}
           />
           <SizeInput
@@ -57,6 +62,7 @@ export function Step2Size({ product, dimensions, onChange, sizes, pricing, onNex
             min={sizes.minHeight}
             max={sizes.maxHeight}
             perCm={pricing.perCmHeight}
+            step={step}
             onChange={(v) => onChange({ width: dimensions.width, depth: dimensions.depth, height: v })}
           />
         </div>
@@ -90,6 +96,7 @@ function SizeInput({
   min,
   max,
   perCm,
+  step,
   onChange,
 }: {
   label: string;
@@ -98,11 +105,17 @@ function SizeInput({
   min: number;
   max: number;
   perCm: number;
+  step: number;
   onChange: (v: number) => void;
 }) {
   const clampedBase = Math.max(min, Math.min(max, base));
   const diffCm = Math.max(0, Math.round((value - clampedBase) / 10));
   const adjust = diffCm * perCm;
+
+  const snap = (v: number) => {
+    const clamped = Math.max(min, Math.min(max, v));
+    return Math.round(clamped / step) * step;
+  };
 
   return (
     <Field label={`${label}`}>
@@ -112,10 +125,10 @@ function SizeInput({
           value={value}
           min={min}
           max={max}
-          step={SLIDER_STEP}
+          step={step}
           onChange={(e) => {
             const v = Number(e.target.value);
-            if (!isNaN(v)) onChange(Math.max(min, Math.min(max, v)));
+            if (!isNaN(v)) onChange(snap(v));
           }}
           className="w-20 shrink-0 rounded-xl border border-birch-200 bg-white px-3 py-3 text-right text-base font-semibold text-charcoal focus:border-birch-400 focus:outline-none focus:ring-2 focus:ring-birch-200 sm:w-28 sm:text-lg"
         />
@@ -131,8 +144,8 @@ function SizeInput({
         value={value}
         min={min}
         max={max}
-        step={SLIDER_STEP}
-        onChange={(e) => onChange(Number(e.target.value))}
+        step={step}
+        onChange={(e) => onChange(snap(Number(e.target.value)))}
         className="mt-3 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-birch-200 accent-charcoal"
       />
       <div className="mt-1.5 flex justify-between text-[10px] text-charcoal-muted">

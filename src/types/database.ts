@@ -50,6 +50,7 @@ export interface ProductRow {
   customizable_width: boolean;
   customizable_depth: boolean;
   customizable_height: boolean;
+  size_step: number;
   shipping_fee: number | null;
   free_shipping_threshold: number | null;
   created_at: string;

@@ -167,6 +167,7 @@ function ProductEditor({
   const [customizableWidth, setCustomizableWidth] = useState(item?.customizable_width ?? true);
   const [customizableDepth, setCustomizableDepth] = useState(item?.customizable_depth ?? true);
   const [customizableHeight, setCustomizableHeight] = useState(item?.customizable_height ?? true);
+  const [sizeStep, setSizeStep] = useState(item?.size_step ?? 10);
   const [useDefaultShipping, setUseDefaultShipping] = useState(item?.shipping_fee === null && item?.free_shipping_threshold === null);
   const [shippingFee, setShippingFee] = useState(item?.shipping_fee ?? 15000);
   const [freeShippingThreshold, setFreeShippingThreshold] = useState(item?.free_shipping_threshold ?? 200000);
@@ -206,6 +207,7 @@ function ProductEditor({
         customizable_width: customizableWidth,
         customizable_depth: customizableDepth,
         customizable_height: customizableHeight,
+        size_step: sizeStep,
         shipping_fee: useDefaultShipping ? null : shippingFee,
         free_shipping_threshold: useDefaultShipping ? null : freeShippingThreshold,
         options,
@@ -297,6 +299,23 @@ function ProductEditor({
                   <AxisToggle label="가로" active={customizableWidth} onClick={() => setCustomizableWidth(!customizableWidth)} />
                   <AxisToggle label="세로" active={customizableDepth} onClick={() => setCustomizableDepth(!customizableDepth)} />
                   <AxisToggle label="높이" active={customizableHeight} onClick={() => setCustomizableHeight(!customizableHeight)} />
+                </div>
+                <p className="mt-3 text-xs text-charcoal-muted">길이 수정 단위</p>
+                <div className="mt-1.5 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSizeStep(10)}
+                    className={`rounded-lg border-2 px-3 py-2 text-xs font-medium transition-all ${sizeStep === 10 ? "border-charcoal bg-charcoal text-ivory" : "border-birch-200 bg-white text-charcoal hover:border-birch-400"}`}
+                  >
+                    1cm
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSizeStep(5000)}
+                    className={`rounded-lg border-2 px-3 py-2 text-xs font-medium transition-all ${sizeStep === 5000 ? "border-charcoal bg-charcoal text-ivory" : "border-birch-200 bg-white text-charcoal hover:border-birch-400"}`}
+                  >
+                    5m
+                  </button>
                 </div>
               </div>
             )}
