@@ -202,15 +202,15 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
                       </div>
                       <div className="space-y-3">
                         {product.customizable_width !== false && (
-                          <SizeSlider label="가로" value={dimensions.width} min={sizes.minWidth} max={sizes.maxWidth}
+                          <SizeSlider label="가로" value={dimensions.width} min={sizes.minWidth} max={sizes.maxWidth} step={product.size_step ?? 10}
                             onChange={(v) => setDimensions({ ...dimensions, width: v })} />
                         )}
                         {product.customizable_depth !== false && (
-                          <SizeSlider label="세로" value={dimensions.depth} min={sizes.minDepth} max={sizes.maxDepth}
+                          <SizeSlider label="세로" value={dimensions.depth} min={sizes.minDepth} max={sizes.maxDepth} step={product.size_step ?? 10}
                             onChange={(v) => setDimensions({ ...dimensions, depth: v })} />
                         )}
                         {product.customizable_height !== false && (
-                          <SizeSlider label="높이" value={dimensions.height} min={sizes.minHeight} max={sizes.maxHeight}
+                          <SizeSlider label="높이" value={dimensions.height} min={sizes.minHeight} max={sizes.maxHeight} step={product.size_step ?? 10}
                             onChange={(v) => setDimensions({ ...dimensions, height: v })} />
                         )}
                       </div>
@@ -448,13 +448,15 @@ function SpecCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SizeSlider({ label, value, min, max, onChange }: {
+function SizeSlider({ label, value, min, max, step, onChange }: {
   label: string;
   value: number;
   min: number;
   max: number;
+  step: number;
   onChange: (v: number) => void;
 }) {
+  const snap = (v: number) => Math.round(v / step) * step;
   return (
     <div>
       <div className="flex items-center justify-between">
@@ -465,9 +467,9 @@ function SizeSlider({ label, value, min, max, onChange }: {
         type="range"
         min={min}
         max={max}
-        step={10}
+        step={step}
         value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
+        onChange={(e) => onChange(snap(Number(e.target.value)))}
         className="mt-1.5 w-full accent-birch-600"
       />
     </div>
