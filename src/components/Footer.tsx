@@ -82,7 +82,10 @@ export function Footer({ onNavigate }: FooterProps) {
               © {new Date().getFullYear()} {BRAND.nameEn}. All rights reserved.
             </p>
             <p>
-              {BRAND.nameKr} · 대표자: {BRAND.ceoName} · 사업자등록번호: {BRAND.businessNumber}
+              제이피지({BRAND.nameKr}) · 대표자: {BRAND.ceoName} · 사업자등록번호: {BRAND.businessNumber}
+            </p>
+            <p>
+              주소: {BRAND.address} · 전화번호: {BRAND.phone}
             </p>
           </div>
         </div>

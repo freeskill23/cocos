@@ -11,6 +11,8 @@ export const BRAND = {
   email: "hello@cocosfurniture.kr",
   businessNumber: "132-18-80228",
   ceoName: "김진수",
+  address: "경기도 포천시 내촌면 금강로 2480-47",
+  phone: "031-535-1799",
 } as const;
 
 export const NAV_LINKS = [
