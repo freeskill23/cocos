@@ -1,0 +1,397 @@
+import { useState } from 'react';
+import { CalendarRange, Wallet, Clock, AlertTriangle, CheckCircle2, Lock, Plus, Minus } from 'lucide-react';
+import { useApp } from '../store';
+import { useAuth } from '../lib/auth';
+import { Calendar, todayYMD, addDaysYMD } from '../components/Calendar';
+import { Modal } from '../components/Modal';
+import { SectionTitle } from '../components/ui';
+import { GallerySlideshow } from '../components/GallerySlideshow';
+import { getCourtSlotPriceWithConfig, formatWon } from '../pricing';
+import { COURT_TIME_SLOTS } from '../types';
+import type { CourtName } from '../types';
+
+const COURTS: { name: CourtName; desc: string; color: string }[] = [
+  { name: 'A코트', desc: '인조잔디, 야간조명, 락커룸, 샤워실, 정식규격사이즈', color: 'bg-volt-500' },
+  { name: 'B코트', desc: '인조잔디, 야간조명, 락커룸, 샤워실, 정식규격사이즈', color: 'bg-navy-700' },
+];
+
+export function CourtScreen() {
+  const {
+    createCourtReservation,
+    getCourtSlotStatus,
+    isCourtBlockedByPension,
+    currentUser,
+    reservations,
+    requestWaiting,
+    tempHolidays,
+    bankAccount,
+    courtPricing,
+    galleryItems,
+    courtOpenDays,
+  } = useApp();
+  const { isGuest } = useAuth();
+  const courtSlides = galleryItems.filter((g) => g.showOnCourt);
+  const [date, setDate] = useState(todayYMD());
+  const [court, setCourt] = useState<CourtName>('A코트');
+  const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [errorReason, setErrorReason] = useState<string | null>(null);
+  const [reservedAmount, setReservedAmount] = useState(0);
+  const [reservedSlots, setReservedSlots] = useState<string[]>([]);
+  const [depositorName, setDepositorName] = useState('');
+  const [depositorPhone, setDepositorPhone] = useState('');
+
+  const blockedByPension = isCourtBlockedByPension(date, court);
+
+  const slotStartHour = (slot: string) => parseInt(slot.split(':')[0], 10);
+  const isSlotPassed = (slot: string) => {
+    if (date !== todayYMD()) return false;
+    const now = new Date();
+    const currentHour = now.getHours();
+    return slotStartHour(slot) <= currentHour;
+  };
+  const toggleSlot = (s: string) => {
+    if (isSlotPassed(s)) return;
+    const removing = selectedSlots.includes(s);
+    if (removing) {
+      const remaining = selectedSlots.filter((x) => x !== s).sort();
+      const hours = remaining.map(slotStartHour);
+      let contiguous = true;
+      for (let i = 1; i < hours.length; i++) {
+        if (hours[i] - hours[i - 1] !== 1) { contiguous = false; break; }
+      }
+      if (!contiguous) {
+        setErrorReason('예약 신청은 시간을 붙여서 예약해주시기 바랍니다');
+        return;
+      }
+      setSelectedSlots(remaining);
+      setErrorReason(null);
+      return;
+    }
+    const hours = [...selectedSlots, s].sort().map(slotStartHour);
+    let contiguous = true;
+    for (let i = 1; i < hours.length; i++) {
+      if (hours[i] - hours[i - 1] !== 1) { contiguous = false; break; }
+    }
+    if (!contiguous) {
+      setErrorReason('예약 신청은 시간을 붙여서 예약해주시기 바랍니다');
+      return;
+    }
+    setSelectedSlots([...selectedSlots, s].sort());
+    setErrorReason(null);
+  };
+
+  const handleReserve = () => {
+    if (selectedSlots.length === 0) return;
+    if (!depositorName.trim()) {
+      setErrorReason('입금자명을 입력해주세요.');
+      return;
+    }
+    if (isGuest && !depositorPhone.trim()) {
+      setErrorReason('연락처를 입력해주세요.');
+      return;
+    }
+    const res = createCourtReservation({ court, date, timeSlots: selectedSlots, depositorName: depositorName.trim(), depositorPhone: (isGuest ? depositorPhone.trim() : undefined) || undefined });
+    if (res.ok) {
+      setReservedAmount(totalAmount);
+      setReservedSlots(sortedSlots);
+      setModalOpen(true);
+      setSelectedSlots([]);
+      setErrorReason(null);
+      setDepositorName('');
+      setDepositorPhone('');
+    } else {
+      setErrorReason(res.reason || '예약에 실패했습니다.');
+    }
+  };
+
+  const handleWaiting = () => {
+    const existing = reservations.find(
+      (r) =>
+        r.type === 'court' &&
+        r.date === date &&
+        r.targetId === court &&
+        r.timeSlot === selectedSlots[0] &&
+        r.waitingSequence === null &&
+        r.status !== '취소',
+    );
+    if (existing) {
+      requestWaiting(existing.id);
+    }
+  };
+
+  const sortedSlots = [...selectedSlots].sort();
+  const totalAmount = selectedSlots.reduce((sum, slot) => sum + getCourtSlotPriceWithConfig(courtPricing, date, slot, tempHolidays), 0);
+
+  return (
+    <div className="space-y-5 pb-4">
+      {courtSlides.length > 0 && <GallerySlideshow slides={courtSlides} />}
+      <div className="mb-3">
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <h2 className="text-xl font-bold text-navy-900">코트 예약</h2>
+          <span className="text-xs font-medium text-slate-500">05:00 ~ 24:00 · 1시간 단위로 예약 가능합니다</span>
+        </div>
+        <div className="mt-1.5 rounded-xl bg-volt-50 border border-volt-200 px-3.5 py-2 flex items-center gap-1.5">
+          <CalendarRange size={14} className="text-volt-700" />
+          <span className="text-xs font-semibold text-volt-800">
+            이용요금 {formatWon(courtPricing.weekdayDay.pricePerHour)}~{formatWon(courtPricing.weekdayNight.pricePerHour)}/시간
+          </span>
+        </div>
+      </div>
+
+      <Calendar
+        value={date}
+        onChange={(d) => { setDate(d); setSelectedSlots([]); setErrorReason(null); }}
+        minDate={todayYMD()}
+        maxDate={addDaysYMD(courtOpenDays)}
+        dayRender={(d) => {
+          const aBooked = COURT_TIME_SLOTS.some((s) => getCourtSlotStatus(d, 'A코트', s) === 'booked');
+          const bBooked = COURT_TIME_SLOTS.some((s) => getCourtSlotStatus(d, 'B코트', s) === 'booked');
+          if (aBooked || bBooked) return <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />;
+          const aPending = COURT_TIME_SLOTS.some((s) => getCourtSlotStatus(d, 'A코트', s) === 'pending');
+          if (aPending) return <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />;
+          return <span className="w-1.5 h-1.5 rounded-full bg-volt-400" />;
+        }}
+      />
+
+      <div className="rounded-2xl bg-navy-50 border border-navy-200 px-4 py-3 flex items-center gap-3 animate-slide-up">
+        <CalendarRange size={20} className="text-navy-700 shrink-0" />
+        <div className="flex flex-wrap items-baseline gap-1.5">
+          <span className="text-sm font-semibold text-navy-700">선택하신 예약일은</span>
+          <span className="text-lg font-extrabold text-navy-900">
+            {new Date(date + 'T00:00:00').toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' })}
+          </span>
+          <span className="text-sm font-semibold text-navy-700">입니다</span>
+          {selectedSlots.length > 0 && (
+            <>
+              <span className="text-sm font-semibold text-navy-700">· 예약 시간</span>
+              <span className="text-base font-bold text-volt-700">
+                {sortedSlots[0]}{sortedSlots.length > 1 ? ` ~ ${sortedSlots[sortedSlots.length - 1]}` : ''}
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Court selector */}
+      <div className="grid sm:grid-cols-2 gap-3">
+        {COURTS.map((c) => {
+          const isSel = court === c.name;
+          return (
+            <button
+              key={c.name}
+              onClick={() => { setCourt(c.name); setSelectedSlots([]); setErrorReason(null); }}
+              className={`card p-4 text-left transition-all ${
+                isSel ? 'ring-2 ring-volt-500 -translate-y-0.5' : 'hover:border-navy-200'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl ${c.color} flex items-center justify-center text-white`}>
+                  <CalendarRange size={20} />
+                </div>
+                <div>
+                  <p className="font-bold text-navy-900 text-lg">{c.name}</p>
+                  <p className="text-xs text-slate-500">{c.desc}</p>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {blockedByPension && (
+        <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 flex items-start gap-3">
+          <AlertTriangle size={20} className="text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold text-amber-800">해당 날짜 펜션 예약 완료</p>
+            <p className="text-sm text-amber-700 mt-0.5">
+              이 날짜에는 펜션 예약이 완료되어 당일 15:00 ~ 익일 11:00 코트 이용이 불가합니다. (그 외 시간대 예약 가능)
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Time slots */}
+      <div className="card p-5">
+        <div className="flex items-center justify-between mb-3">
+          <SectionTitle title="시간대 선택" subtitle={`${court} · 1시간 단위 · 복수 선택`} />
+          {selectedSlots.length > 0 && (
+            <button
+              onClick={() => setSelectedSlots([])}
+              className="text-xs font-bold text-slate-400 hover:text-rose-500 transition"
+            >
+              선택 해제
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+          {COURT_TIME_SLOTS.map((s) => {
+            const status = getCourtSlotStatus(date, court, s);
+            const isSel = selectedSlots.includes(s);
+            const passed = isSlotPassed(s);
+            const disabled = status !== 'available' || passed;
+            return (
+              <button
+                key={s}
+                disabled={disabled}
+                onClick={() => toggleSlot(s)}
+                className={`relative rounded-xl p-3 text-sm font-bold transition-all border ${
+                  isSel
+                    ? 'bg-navy-900 text-white border-navy-900 shadow-navy'
+                    : passed
+                      ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed'
+                      : status === 'available'
+                        ? 'bg-white text-navy-800 border-slate-200 hover:border-volt-400 hover:bg-volt-50'
+                        : status === 'blocked'
+                          ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed'
+                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span>{s}</span>
+                  {isSel ? (
+                    <Minus size={13} />
+                  ) : passed ? (
+                    <Clock size={13} />
+                  ) : status === 'booked' ? (
+                    <Lock size={13} />
+                  ) : status === 'pending' ? (
+                    <Clock size={13} />
+                  ) : (
+                    <Plus size={13} className="opacity-40" />
+                  )}
+                </div>
+                <p className="text-[10px] font-medium mt-0.5 opacity-70">
+                  {isSel
+                    ? '선택됨'
+                    : passed
+                      ? '시간지남'
+                      : status === 'available'
+                        ? '예약가능'
+                        : status === 'booked'
+                          ? '예약완료'
+                          : status === 'pending'
+                            ? '신청중'
+                            : '펜션전용'}
+                </p>
+              </button>
+            );
+          })}
+        </div>
+
+        {errorReason && (
+          <div className="mt-4 rounded-xl bg-rose-50 border border-rose-200 p-3.5 flex items-start gap-2 animate-slide-up">
+            <AlertTriangle size={18} className="text-rose-600 shrink-0 mt-0.5" />
+            <p className="text-sm text-rose-800">{errorReason}</p>
+          </div>
+        )}
+
+        {sortedSlots.length > 0 && !blockedByPension && (
+          <div className="mt-4 space-y-2 animate-slide-up">
+            <div className="rounded-xl bg-navy-50 p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="font-bold text-navy-900">{court}</p>
+                <p className="text-xs text-slate-500">{date}</p>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {sortedSlots.map((s) => (
+                  <span key={s} className="chip bg-white text-navy-800 border border-navy-100">
+                    <Clock size={11} /> {s}
+                  </span>
+                ))}
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-navy-100">
+                <p className="text-xs text-slate-500">총 {selectedSlots.length}시간대</p>
+                <p className="font-extrabold text-navy-900">{formatWon(totalAmount)}</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-navy-700 bg-navy-50 rounded-lg px-3 py-2">
+                아래 입금자명을 입력해주시고 예약을 진행해주세요
+              </p>
+              <input
+                type="text"
+                value={depositorName}
+                onChange={(e) => setDepositorName(e.target.value)}
+                placeholder="입금자명"
+                className={`input py-2.5 transition-all ${
+                  depositorName.trim()
+                    ? 'border-2 border-volt-500 ring-2 ring-volt-200 font-bold'
+                    : 'input-blink'
+                }`}
+                maxLength={20}
+              />
+              {isGuest && (
+                <input
+                  type="tel"
+                  value={depositorPhone}
+                  onChange={(e) => setDepositorPhone(e.target.value)}
+                  placeholder="연락처 (예: 010-1234-5678)"
+                  className="input py-2.5"
+                  maxLength={20}
+                />
+              )}
+            </div>
+            <button onClick={handleReserve} disabled={!depositorName.trim()} className="btn-primary w-full py-3 text-base disabled:opacity-50 disabled:cursor-not-allowed">
+              <Wallet size={18} /> 예약하기 ({formatWon(totalAmount)})
+            </button>
+          </div>
+        )}
+
+        {/* Waiting for booked/pending slot */}
+        {selectedSlots.length === 1 && (getCourtSlotStatus(date, court, selectedSlots[0]) === 'booked' || getCourtSlotStatus(date, court, selectedSlots[0]) === 'pending') && !blockedByPension && (
+          <div className="mt-4 space-y-2 animate-slide-up">
+            <div className="rounded-xl bg-amber-50 border border-amber-200 p-3.5 flex items-start gap-2">
+              <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-sm text-amber-800">
+                이미 예약된 시간대입니다. 대기 신청을 통해 취소 시 우선권을 받을 수 있습니다.
+              </p>
+            </div>
+            <button onClick={handleWaiting} className="btn-navy w-full">
+              <Clock size={18} /> 예약 대기 신청하기
+            </button>
+          </div>
+        )}
+      </div>
+
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="입금 안내"
+        footer={
+          <>
+            <button className="btn-ghost" onClick={() => setModalOpen(false)}>
+              닫기
+            </button>
+            <button className="btn-primary" onClick={() => setModalOpen(false)}>
+              <CheckCircle2 size={18} /> 확인
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="rounded-2xl bg-volt-50 border border-volt-200 p-4">
+            <p className="text-sm text-volt-800 font-semibold mb-2">입금 계좌</p>
+            <p className="text-lg font-bold text-navy-900">{bankAccount.bank}</p>
+            <p className="text-xl font-extrabold text-navy-900 tracking-wider">{bankAccount.number}</p>
+            <p className="text-sm text-slate-500 mt-1">예금주: {bankAccount.holder}</p>
+          </div>
+          <div className="text-sm text-slate-600 space-y-2">
+            <p><span className="font-bold text-navy-800">예약자:</span> {depositorName || currentUser.name}{(depositorPhone || currentUser.phone) ? ` (${depositorPhone || currentUser.phone})` : ''}</p>
+            <p><span className="font-bold text-navy-800">코트:</span> {court}</p>
+            <div>
+              <p className="font-bold text-navy-800">시간대:</p>
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {reservedSlots.map((s) => (
+                  <span key={s} className="chip bg-navy-50 text-navy-700">{s}</span>
+                ))}
+              </div>
+            </div>
+            <p><span className="font-bold text-navy-800">날짜:</span> {date}</p>
+            <p><span className="font-bold text-navy-800">금액:</span> {formatWon(reservedAmount)}</p>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}

@@ -1,0 +1,3338 @@
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  type ReactNode,
+} from 'react';
+import type {
+  User,
+  Room,
+  Reservation,
+  MatchingPost,
+  MatchingStatus,
+  Notice,
+  GalleryItem,
+  AppNotification,
+  Review,
+  ReservationType,
+  ReservationStatus,
+  CourtName,
+  RoomName,
+  BBQVenue,
+  NoticeType,
+  MatchingApplication,
+  ApplicantGender,
+  GameType,
+  GenderRequirement,
+  NTRP,
+  Hand,
+  GamePreference,
+  GameDayEvent,
+  EventGameType,
+  EventStatus,
+} from './types';
+import { COURT_TIME_SLOTS, MATCHING_MAX_PLAYERS, mergeTimeSlots } from './types';
+import { addDaysToYMD } from './components/Calendar';
+import {
+  initialUsers,
+  initialRooms,
+  initialReservations,
+  initialMatchingPosts,
+  initialNotices,
+  initialNotifications,
+  BANK_ACCOUNT,
+} from './mockData';
+import type { AuthUser } from './lib/auth';
+import { supabase, supabaseConfigured, SUPABASE_URL, SUPABASE_ANON_KEY } from './lib/supabase';
+import { isWeekendOrHoliday, isPensionWeekendOrHoliday, COURT_SLOT_PRICE, getCourtSlotPrice, getCourtSlotPriceWithConfig, DEFAULT_COURT_PRICING, PENSION_WEEKDAY_PRICE, PENSION_WEEKEND_PRICE, DEFAULT_BBQ_PRICING, computeBBQPrice } from './pricing';
+import type { CourtPricing, BBQPricing } from './pricing';
+
+// Pension reserved on a date blocks court from 15:00 that day to 11:00 next day.
+const PENSION_BLOCK_START_HOUR = 15;
+export const EXTRA_PERSON_FEE = 100000;
+const PENSION_BLOCK_END_HOUR = 11;
+
+type ReservationRow = {
+  id: string;
+  type: ReservationType;
+  user_id: string;
+  target_id: string;
+  target_label: string;
+  date: string;
+  time_slot: string | null;
+  capacity: number | null;
+  status: ReservationStatus;
+  waiting_sequence: number | null;
+  deposit_timeout_until: number | null;
+  amount: number;
+  created_at: number;
+  matching_post_id: string | null;
+  batch_id: string | null;
+  updated_at?: string | null;
+  depositor_name?: string | null;
+  depositor_phone?: string | null;
+};
+
+function rowToReservation(r: ReservationRow): Reservation {
+  return {
+    id: r.id,
+    type: r.type,
+    userId: r.user_id,
+    targetId: r.target_id,
+    targetLabel: r.target_label,
+    date: typeof r.date === 'string' ? r.date : new Date(r.date).toISOString().slice(0, 10),
+    timeSlot: r.time_slot || undefined,
+    capacity: r.capacity || undefined,
+    status: r.status,
+    waitingSequence: r.waiting_sequence,
+    depositTimeoutUntil: r.deposit_timeout_until,
+    amount: r.amount,
+    createdAt: r.created_at,
+    matchingPostId: r.matching_post_id || undefined,
+    batchId: r.batch_id || undefined,
+    updatedAt: r.updated_at ? new Date(r.updated_at).getTime() : undefined,
+    depositorName: r.depositor_name || undefined,
+    depositorPhone: r.depositor_phone || undefined,
+  };
+}
+
+function reservationToRow(r: Reservation): ReservationRow {
+  return {
+    id: r.id,
+    type: r.type,
+    user_id: r.userId,
+    target_id: r.targetId,
+    target_label: r.targetLabel,
+    date: r.date,
+    time_slot: r.timeSlot || null,
+    capacity: r.capacity || null,
+    status: r.status,
+    waiting_sequence: r.waitingSequence,
+    deposit_timeout_until: r.depositTimeoutUntil || null,
+    amount: r.amount,
+    created_at: r.createdAt,
+    matching_post_id: r.matchingPostId || null,
+    batch_id: r.batchId || null,
+    depositor_name: r.depositorName || null,
+    depositor_phone: r.depositorPhone || null,
+  };
+}
+
+const uid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 9)}`;
+
+interface Toast {
+  id: string;
+  message: string;
+  kind: 'success' | 'error' | 'info';
+}
+
+interface AppState {
+  // identity
+  currentUserId: string;
+
+  // data
+  users: User[];
+  rooms: Room[];
+  updateRoom: (id: string, patch: Partial<Pick<Room, 'maxCapacity' | 'description'>>) => void;
+  reservations: Reservation[];
+  matchingPosts: MatchingPost[];
+  gameDayEvents: GameDayEvent[];
+  notices: Notice[];
+  galleryItems: GalleryItem[];
+  notifications: AppNotification[];
+
+  // derived helpers
+  currentUser: User;
+  getUser: (id: string) => User | undefined;
+  updateCurrentUser: (patch: Partial<Pick<User, 'name' | 'nickname' | 'phone' | 'profileImg' | 'career' | 'ntrp' | 'hand' | 'gamePreference' | 'bio'>>) => void;
+
+  // reservation actions
+  createPensionReservation: (input: {
+    roomId: string;
+    date: string;
+    capacity: number;
+  }) => { ok: boolean; reason?: string; reservation?: Reservation };
+  createCourtReservation: (input: {
+    court: CourtName;
+    date: string;
+    timeSlots: string[];
+  }) => { ok: boolean; reason?: string; reservations?: Reservation[] };
+  createAdminCourtReservation: (input: {
+    court: CourtName;
+    date: string;
+    timeSlot: string;
+    label: string;
+  }) => { ok: boolean; reason?: string; reservation?: Reservation };
+  requestWaiting: (reservationId: string) => { ok: boolean; sequence?: number };
+  cancelReservation: (id: string) => void;
+  approveReservation: (id: string) => void;
+  approveReservations: (ids: string[]) => void;
+  rejectReservation: (id: string) => void;
+
+  // matching
+  createMatchingPost: (input: {
+    court: CourtName;
+    date: string;
+    timeSlots: string[];
+    ntrpRequirement: NTRP | 'any';
+    genderRequirement: GenderRequirement;
+    maxPlayers: number;
+    gameType: GameType;
+    description: string;
+    depositorName?: string;
+  }) => { ok: boolean; reason?: string; post?: MatchingPost };
+  createMatchingPostFromReservation: (input: {
+    reservationIds: string[];
+    ntrpRequirement: NTRP | 'any';
+    genderRequirement: GenderRequirement;
+    maxPlayers: number;
+    gameType: GameType;
+    description: string;
+  }) => { ok: boolean; reason?: string; post?: MatchingPost };
+  applyMatching: (postId: string, intro: string, gender?: ApplicantGender) => { ok: boolean; reason?: string };
+  approveMatchingApplication: (postId: string, applicationId: string) => void;
+  rejectMatchingApplication: (postId: string, applicationId: string) => void;
+  closeMatching: (postId: string) => void;
+  deleteMatchingPost: (postId: string) => void;
+
+  // notices
+  createNotice: (n: { title: string; content: string; type: NoticeType; imageUrl?: string; isMustRead?: boolean; linkUrl?: string }) => void;
+  updateNotice: (id: string, n: { title: string; content: string; type: NoticeType; imageUrl?: string; isMustRead?: boolean; linkUrl?: string }) => void;
+  deleteNotice: (id: string) => void;
+  reorderNotices: (orderedIds: string[]) => void;
+  noticeComments: NoticeComment[];
+  loadNoticeComments: (noticeId: string) => Promise<void>;
+  addNoticeComment: (noticeId: string, content: string) => Promise<{ ok: boolean; error?: string }>;
+  addAdminNoticeComment: (noticeId: string, content: string, password: string, parentId?: string | null) => Promise<{ ok: boolean; error?: string }>;
+  deleteAdminNoticeComment: (commentId: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  deleteNoticeComment: (commentId: string) => void;
+  incrementNoticeViews: (noticeId: string) => void;
+
+  // gallery
+  createGalleryItem: (input: { imageUrl?: string; summary: string; youtubeUrl?: string }) => void;
+  deleteGalleryItem: (id: string) => void;
+  toggleGalleryFeatured: (id: string) => void;
+  toggleGalleryShowOnCourt: (id: string) => void;
+  toggleGalleryShowOnPension: (id: string) => void;
+  toggleGalleryShowOnBbq: (id: string) => void;
+  reorderGalleryItem: (id: string, direction: 'up' | 'down') => void;
+  setGalleryOrder: (orderedIds: string[]) => void;
+  updateGalleryItem: (id: string, patch: { summary?: string; imageUrl?: string; youtubeUrl?: string | null }) => void;
+
+  // reviews
+  reviews: Review[];
+  createReview: (input: { authorName: string; content: string; rating: number; imageUrls: string[] }) => Promise<{ ok: boolean; error?: string }>;
+  deleteReview: (id: string) => void;
+  replyReview: (id: string, reply: string) => void;
+
+  // notifications
+  markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => void;
+
+  // toasts
+  toasts: Toast[];
+  pushToast: (message: string, kind?: Toast['kind']) => void;
+  dismissToast: (id: string) => void;
+
+  // pricing
+  pensionWeekdayPrice: number;
+  pensionWeekendPrice: number;
+  pensionPriceOverrides: Record<string, number>;
+  getPensionPrice: (dateStr: string) => number;
+  updatePensionPrice: (weekday: number, weekend: number) => void;
+  setPensionPriceForDate: (dateStr: string, price: number) => void;
+  removePensionPriceOverride: (dateStr: string) => void;
+
+  // pension base capacity (기준인원)
+  pensionWeekdayBaseCapacity: number;
+  pensionWeekendBaseCapacity: number;
+  getBaseCapacityForDate: (dateStr: string) => number;
+  updatePensionBaseCapacity: (weekday: number, weekend: number) => void;
+
+  // court pricing
+  courtPricing: CourtPricing;
+  updateCourtPricing: (pricing: CourtPricing) => void;
+
+  // bbq package pricing
+  bbqPricing: BBQPricing;
+  updateBBQPricing: (pricing: BBQPricing) => void;
+  createBBQReservation: (input: {
+    venue: BBQVenue;
+    date: string;
+    startHour: number;
+    endHour: number;
+    capacity: number;
+    depositorName?: string;
+    depositorPhone?: string;
+  }) => { ok: boolean; reason?: string; reservation?: Reservation };
+
+  // banner
+  bannerImageUrl: string | null;
+  updateBannerImage: (url: string | null) => void;
+  bannerGradientColors: { from: string; via: string; to: string } | null;
+  updateBannerGradientColors: (colors: { from: string; via: string; to: string } | null) => void;
+
+  // logo
+  logoImageUrl: string | null;
+  updateLogoImage: (url: string | null) => void;
+
+  // bank account (deposit account shown on reservation screens)
+  bankAccount: { bank: string; number: string; holder: string };
+  updateBankAccount: (acct: { bank: string; number: string; holder: string }) => void;
+
+  // reservation open window limits
+  courtOpenDays: number;
+  pensionOpenMonths: number;
+  bbqOpenDays: number;
+  updateReservationLimits: (courtDays: number, pensionMonths: number) => void;
+
+  // telegram notifications
+  telegramConfig: { botToken: string; chatId: string };
+  updateTelegramConfig: (cfg: { botToken: string; chatId: string }) => void;
+  sendTelegramTest: (cfg?: { botToken: string; chatId: string }) => Promise<{ ok: boolean; error?: string }>;
+
+  // temporary holidays
+  tempHolidays: string[];
+  toggleHoliday: (dateStr: string) => void;
+  isHoliday: (dateStr: string) => boolean;
+
+  // date memos (admin calendar)
+  dateMemos: Record<string, string>;
+  getDateMemo: (dateStr: string) => string;
+  saveDateMemo: (dateStr: string, content: string) => void;
+
+  // queries
+  isPensionBlockedByCourt: (date: string, roomName: RoomName) => boolean;
+  isCourtBlockedByPension: (date: string, court: CourtName) => boolean;
+  isCourtSlotBlockedByPension: (date: string, court: CourtName, slot: string) => boolean;
+  isCourtSlotBlockedByGameDay: (date: string, court: CourtName, slot: string) => boolean;
+  isPensionBlockedByGameDay: (date: string, roomName: RoomName) => boolean;
+  getGameDayBlockedHours: (date: string, court: CourtName) => Set<number>;
+  getPensionStatusForDate: (date: string, roomName: RoomName) => {
+    status: 'available' | 'full' | 'booked' | 'pending';
+    reservation?: Reservation;
+    waitingCount: number;
+  };
+  getCourtSlotStatus: (
+    date: string,
+    court: CourtName,
+    slot: string,
+  ) => 'available' | 'booked' | 'pending' | 'blocked';
+  getReservationsByDate: (date: string) => Reservation[];
+  getMatchingsByDate: (date: string) => MatchingPost[];
+
+  // cross-screen navigation: focus a matching post's applicant management
+  focusMatchingPostId: string | null;
+  setFocusMatchingPostId: (id: string | null) => void;
+}
+
+const Ctx = createContext<AppState | null>(null);
+
+export function useApp() {
+  const v = useContext(Ctx);
+  if (!v) throw new Error('useApp must be used within AppProvider');
+  return v;
+}
+
+export function AppProvider({ children, authUser }: { children: ReactNode; authUser: AuthUser }) {
+  const currentUserId = authUser.id;
+  const [users, setUsers] = useState<User[]>(() => {
+    const authAsUser: User = {
+      id: authUser.id,
+      name: authUser.name,
+      nickname: authUser.nickname || '',
+      phone: authUser.phone,
+      profileImg: authUser.profileImg,
+      career: authUser.career,
+      ntrp: authUser.ntrp,
+      hand: authUser.hand,
+      gamePreference: authUser.gamePreference,
+      bio: authUser.bio,
+      isAdmin: false,
+      referralSource: authUser.referralSource || '',
+    };
+    return [authAsUser, ...initialUsers.filter((u) => u.id !== authUser.id)];
+  });
+
+  // Load all profiles from Supabase so admin can resolve any user's name/phone
+  const loadProfiles = useCallback(async () => {
+    if (!supabaseConfigured) return;
+    const { data, error } = await supabase.from('profiles').select('*');
+    if (error) {
+      console.error('[loadProfiles]', error.message);
+      return;
+    }
+    if (!data) return;
+    setUsers((prev) => {
+      const existingIds = new Set(prev.map((u) => u.id));
+      const loaded: User[] = data
+        .filter((p) => !existingIds.has(p.id))
+        .map((p) => ({
+          id: p.id as string,
+          name: (p.name as string) || '사용자',
+          nickname: (p.nickname as string) || '',
+          phone: (p.phone as string) || '',
+          profileImg:
+            (p.profile_img as string) || '/logo_png.png',
+          career: (p.career as string) || '0년',
+          ntrp: (p.ntrp as NTRP) || '2.0',
+          hand: (p.hand as Hand) || 'right',
+          gamePreference: (p.game_preference as GamePreference) || 'any',
+          bio: (p.bio as string) || '',
+          isAdmin: false,
+          referralSource: (p.referral_source as string) || '',
+        }));
+      // Also update existing entries with fresh profile data
+      const updated = prev.map((u) => {
+        const fresh = data.find((p) => p.id === u.id);
+        if (!fresh) return u;
+        return {
+          ...u,
+          name: (fresh.name as string) || u.name,
+          nickname: (fresh.nickname as string) || u.nickname,
+          phone: (fresh.phone as string) || u.phone,
+          profileImg: (fresh.profile_img as string) || u.profileImg,
+          referralSource: (fresh.referral_source as string) || u.referralSource,
+        };
+      });
+      return [...updated, ...loaded];
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    loadProfiles();
+    const channel = supabase
+      .channel('profiles_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'profiles' },
+        () => loadProfiles(),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadProfiles]);
+  const [rooms, setRooms] = useState<Room[]>(initialRooms);
+  const [reservations, setReservations] = useState<Reservation[]>(supabaseConfigured ? [] : initialReservations);
+  const [matchingPosts, setMatchingPosts] = useState<MatchingPost[]>(supabaseConfigured ? [] : initialMatchingPosts);
+  const [gameDayEvents, setGameDayEvents] = useState<GameDayEvent[]>([]);
+
+  const syncMatchingPost = useCallback(async (post: MatchingPost) => {
+    if (!supabaseConfigured) return;
+    const { error } = await supabase.from('matching_posts').upsert({
+      id: post.id,
+      reservation_id: post.reservationId,
+      reservation_ids: post.reservationIds,
+      user_id: post.userId,
+      date: post.date,
+      time: post.time,
+      court: post.court,
+      ntrp_requirement: post.ntrpRequirement,
+      gender_requirement: post.genderRequirement,
+      max_players: post.maxPlayers,
+      game_type: post.gameType,
+      description: post.description,
+      status: post.status,
+      court_approved: post.courtApproved,
+      applications: post.applications,
+      created_at: post.createdAt,
+    });
+    if (error) console.error('matching_posts sync failed', error);
+  }, []);
+
+  // Load matching posts from Supabase so they survive refresh
+  const loadMatchingPosts = useCallback(async () => {
+    if (!supabaseConfigured) return;
+    const { data, error } = await supabase
+      .from('matching_posts')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.error('[loadMatchingPosts]', error.message);
+      return;
+    }
+    if (data) {
+      const rows = data.map((p) => ({
+        id: p.id as string,
+        reservationId: p.reservation_id as string,
+        reservationIds: (p.reservation_ids as string[]) || [],
+        userId: p.user_id as string,
+        date: p.date as string,
+        time: p.time as string,
+        court: p.court as CourtName,
+        ntrpRequirement: p.ntrp_requirement as NTRP | 'any',
+        genderRequirement: p.gender_requirement as GenderRequirement,
+        maxPlayers: p.max_players as number,
+        gameType: p.game_type as GameType,
+        description: p.description as string,
+        status: p.status as MatchingStatus,
+        courtApproved: (p.court_approved as boolean) ?? false,
+        applications: (p.applications as MatchingApplication[]) || [],
+        createdAt: p.created_at as number,
+      }));
+      const now = Date.now();
+      const PURGE_MS = 24 * 60 * 60 * 1000;
+      const matchingEndEpoch = (date: string, time: string) => {
+        const end = time.includes('-') ? time.split('-')[1] : time;
+        const [h, m] = end.split(':').map(Number);
+        return new Date(`${date}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`).getTime();
+      };
+      const toPurge = rows.filter((m) => now - matchingEndEpoch(m.date, m.time) > PURGE_MS);
+      if (toPurge.length > 0) {
+        setMatchingPosts(rows.filter((m) => !toPurge.find((p) => p.id === m.id)));
+        toPurge.forEach((m) => supabase.from('matching_posts').delete().eq('id', m.id));
+      } else {
+        setMatchingPosts(rows);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    loadMatchingPosts();
+    // Realtime: refresh matching posts when any row changes so hosts
+    // see new applicants without a manual page reload.
+    const channel = supabase
+      .channel('matching_posts_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'matching_posts' },
+        () => {
+          loadMatchingPosts();
+        },
+      )
+      .subscribe((status) => {
+        if (status !== 'SUBSCRIBED') console.warn('[matching_realtime]', status);
+      });
+    const poll = setInterval(() => loadMatchingPosts(), 15000);
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(poll);
+    };
+  }, [loadMatchingPosts]);
+
+  // Load game day events from Supabase
+  const loadGameDayEvents = useCallback(async () => {
+    if (!supabaseConfigured) return;
+    const { data, error } = await supabase
+      .from('game_day_events')
+      .select('*')
+      .order('date', { ascending: true });
+    if (error) {
+      console.error('[loadGameDayEvents]', error.message);
+      return;
+    }
+    if (data) {
+      const rows: GameDayEvent[] = (data as Record<string, unknown>[]).map((r) => ({
+        id: r.id as string,
+        title: r.title as string,
+        gameType: r.game_type as EventGameType,
+        date: typeof r.date === 'string' ? r.date : new Date(r.date as string).toISOString().slice(0, 10),
+        startTime: r.start_time as string,
+        endTime: r.end_time as string,
+        court: r.court as string,
+        maxTeams: r.max_teams as number,
+        minTeams: r.min_teams as number,
+        fee: r.fee as number,
+        feePerPlayer: (r.fee_per_player as number) ?? 0,
+        refundAccount: (r.refund_account as string) || '',
+        description: r.description as string,
+        status: r.status as EventStatus,
+        bracketGeneratedAt: r.bracket_generated_at as number | null,
+        createdAt: r.created_at as number,
+      }));
+      setGameDayEvents(rows);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    loadGameDayEvents();
+    const channel = supabase
+      .channel('game_day_events_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'game_day_events' },
+        () => loadGameDayEvents(),
+      )
+      .subscribe();
+    const poll = setInterval(() => loadGameDayEvents(), 15000);
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(poll);
+    };
+  }, [loadGameDayEvents]);
+
+  const [notices, setNotices] = useState<Notice[]>(supabaseConfigured ? [] : initialNotices);
+  const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
+
+  // Load notices from Supabase so admin edits are shared across sessions
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    let cancelled = false;
+    let retryCount = 0;
+    const load = async () => {
+      const { data, error } = await supabase
+        .from('notices')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (cancelled) return;
+      if (error) {
+        if (retryCount < 3) {
+          retryCount++;
+          setTimeout(load, 1500 * retryCount);
+        }
+        return;
+      }
+      setNotices(
+        (data || [])
+          .map((n) => ({
+            id: n.id as string,
+            title: n.title as string,
+            content: n.content as string,
+            type: n.type as NoticeType,
+            createdAt: n.created_at as number,
+            sortOrder: n.sort_order as number | undefined,
+            imageUrl: (n.image_url as string | null) || undefined,
+            isMustRead: (n.is_must_read as boolean) ?? false,
+            linkUrl: (n.link_url as string | null) || undefined,
+            views: (n.views as number) ?? 0,
+          }))
+          .sort((a, b) => {
+            const sa = a.sortOrder ?? a.createdAt;
+            const sb = b.sortOrder ?? b.createdAt;
+            return sb - sa;
+          }),
+      );
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Load gallery items from Supabase
+  const loadGalleryItems = useCallback(async () => {
+    if (!supabaseConfigured) return false;
+    const { data, error } = await supabase
+      .from('gallery_items')
+      .select('*')
+      .order('sort_order', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.error('[loadGalleryItems]', error.message);
+      return false;
+    }
+    const nextItems = (data || []).map((g) => ({
+      id: g.id as string,
+      imageUrl: g.image_url as string,
+      summary: g.summary as string,
+      createdAt: g.created_at as number,
+      isFeatured: (g.is_featured as boolean) || false,
+      showOnCourt: (g.show_on_court as boolean) || false,
+      showOnPension: (g.show_on_pension as boolean) || false,
+      showOnBbq: (g.show_on_bbq as boolean) || false,
+      sortOrder: (g.sort_order as number) || 0,
+      youtubeUrl: (g.youtube_url as string | null) ?? null,
+    }));
+    setGalleryItems((previous) => nextItems.length === 0 && previous.length > 0 ? previous : nextItems);
+    return true;
+  }, []);
+
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    let cancelled = false;
+    const refreshGallery = async () => {
+      for (let attempt = 0; attempt < 3 && !cancelled; attempt++) {
+        if (await loadGalleryItems()) return;
+        await new Promise<void>((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+      }
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') void refreshGallery();
+    };
+    void refreshGallery();
+    const poll = window.setInterval(() => void refreshGallery(), 60000);
+    document.addEventListener('visibilitychange', handleVisibility);
+    const channel = supabase
+      .channel('gallery_items_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'gallery_items' },
+        () => void refreshGallery(),
+      )
+      .subscribe();
+    return () => {
+      cancelled = true;
+      window.clearInterval(poll);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      supabase.removeChannel(channel);
+    };
+  }, [loadGalleryItems]);
+
+  // Load reviews from Supabase
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    let cancelled = false;
+    let retryCount = 0;
+    const load = async () => {
+      const { data, error } = await supabase
+        .from('reviews')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (cancelled) return;
+      if (error) {
+        if (retryCount < 3) {
+          retryCount++;
+          setTimeout(load, 1500 * retryCount);
+        }
+        return;
+      }
+      setReviews(
+        (data || [])
+          .map((r) => ({
+            id: r.id as string,
+            authorName: r.author_name as string,
+            authorId: (r.author_id as string | null) ?? null,
+            content: r.content as string,
+            rating: r.rating as number,
+            imageUrls: (r.image_urls as string[]) || [],
+            adminReply: (r.admin_reply as string | null) ?? null,
+            adminReplyAt: (r.admin_reply_at as number | null) ?? null,
+            isDeleted: (r.is_deleted as boolean) ?? false,
+            createdAt: r.created_at as number,
+          }))
+          .filter((r) => !r.isDeleted),
+      );
+    };
+    load();
+    const channel = supabase
+      .channel('reviews_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'reviews' },
+        async () => {
+          const { data } = await supabase
+            .from('reviews')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (data) {
+            setReviews(
+              data
+                .map((r) => ({
+                  id: r.id as string,
+                  authorName: r.author_name as string,
+                  authorId: (r.author_id as string | null) ?? null,
+                  content: r.content as string,
+                  rating: r.rating as number,
+                  imageUrls: (r.image_urls as string[]) || [],
+                  adminReply: (r.admin_reply as string | null) ?? null,
+                  adminReplyAt: (r.admin_reply_at as number | null) ?? null,
+                  isDeleted: (r.is_deleted as boolean) ?? false,
+                  createdAt: r.created_at as number,
+                }))
+                .filter((r) => !r.isDeleted),
+            );
+          }
+        },
+      )
+      .subscribe();
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, []);
+  const [notifications, setNotifications] = useState<AppNotification[]>(supabaseConfigured ? [] : initialNotifications);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  // ===== Supabase reservation persistence =====
+  const upsertReservationToSupabase = useCallback(async (r: Reservation) => {
+    if (!supabaseConfigured) return;
+    const { error } = await supabase.from('reservations').upsert(reservationToRow(r));
+    if (error) console.error('[upsertReservation]', error.message, r.id);
+  }, []);
+
+  const deleteReservationFromSupabase = useCallback(async (id: string) => {
+    if (!supabaseConfigured) return;
+    await supabase.from('reservations').delete().eq('id', id);
+  }, []);
+
+  const loadReservations = useCallback(async () => {
+    if (!supabaseConfigured) return;
+    const { data, error } = await supabase
+      .from('reservations')
+      .select('*')
+      .order('created_at', { ascending: true });
+    if (error) {
+      console.error('[loadReservations]', error.message);
+      return;
+    }
+    if (data) {
+      const rows = data.map((r) => rowToReservation(r as ReservationRow));
+      const now = Date.now();
+      const PURGE_MS = 24 * 60 * 60 * 1000;
+      const slotEndEpoch = (date: string, timeSlot?: string) => {
+        if (timeSlot) {
+          const end = timeSlot.split('-')[1];
+          const [h, m] = end.split(':').map(Number);
+          return new Date(`${date}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`).getTime();
+        }
+        return new Date(`${date}T00:00:00`).getTime();
+      };
+      const toPurge = rows.filter((r) => {
+        if (r.status === '취소' && r.updatedAt && now - r.updatedAt > PURGE_MS) return true;
+        if (r.type === 'court' && r.timeSlot && now - slotEndEpoch(r.date, r.timeSlot) > PURGE_MS) return true;
+        if (r.type === 'pension') {
+          const cutoff = new Date();
+          cutoff.setMonth(cutoff.getMonth() - 1);
+          if (new Date(`${r.date}T00:00:00`).getTime() < cutoff.getTime()) return true;
+        }
+        return false;
+      });
+      if (toPurge.length > 0) {
+        setReservations(rows.filter((r) => !toPurge.find((p) => p.id === r.id)));
+        toPurge.forEach((r) => deleteReservationFromSupabase(r.id));
+      } else {
+        setReservations(rows);
+      }
+    }
+  }, [deleteReservationFromSupabase]);
+
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    loadReservations();
+    const channel = supabase
+      .channel('reservations_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'reservations' },
+        () => loadReservations(),
+      )
+      .subscribe((status) => {
+        if (status !== 'SUBSCRIBED') console.warn('[reservations_realtime]', status);
+      });
+    const poll = setInterval(() => loadReservations(), 15000);
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(poll);
+    };
+  }, [loadReservations]);
+
+  // Purge fully-cancelled reservations older than 24 hours from local state
+  useEffect(() => {
+    const purge = () => {
+      const now = Date.now();
+      setReservations((prev) => prev.filter((r) => !(r.status === '취소' && r.updatedAt && now - r.updatedAt > 24 * 60 * 60 * 1000)));
+    };
+    purge();
+    const interval = setInterval(purge, 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Purge court reservations and matching posts whose scheduled time is older than 24 hours
+  useEffect(() => {
+    const PURGE_MS = 24 * 60 * 60 * 1000;
+    const slotEndEpoch = (date: string, timeSlot?: string) => {
+      // timeSlot like '09:00-10:00'; use end hour of slot, or start of date if absent
+      if (timeSlot) {
+        const end = timeSlot.split('-')[1];
+        const [h, m] = end.split(':').map(Number);
+        return new Date(`${date}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`).getTime();
+      }
+      return new Date(`${date}T00:00:00`).getTime();
+    };
+    const matchingEndEpoch = (date: string, time: string) => {
+      // time like '09:00-11:00' or '09:00'
+      const end = time.includes('-') ? time.split('-')[1] : time;
+      const [h, m] = end.split(':').map(Number);
+      return new Date(`${date}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`).getTime();
+    };
+    const purge = () => {
+      const now = Date.now();
+      setReservations((prev) => {
+        const expired = prev.filter(
+          (r) => r.type === 'court' && r.timeSlot && now - slotEndEpoch(r.date, r.timeSlot) > PURGE_MS,
+        );
+        if (expired.length > 0 && supabaseConfigured) {
+          expired.forEach((r) => deleteReservationFromSupabase(r.id));
+        }
+        return expired.length > 0 ? prev.filter((r) => !expired.find((e) => e.id === r.id)) : prev;
+      });
+      setMatchingPosts((prev) => {
+        const expired = prev.filter((m) => now - matchingEndEpoch(m.date, m.time) > PURGE_MS);
+        if (expired.length > 0 && supabaseConfigured) {
+          expired.forEach((m) => supabase.from('matching_posts').delete().eq('id', m.id));
+        }
+        return expired.length > 0 ? prev.filter((m) => !expired.find((e) => e.id === m.id)) : prev;
+      });
+    };
+    purge();
+    const interval = setInterval(purge, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [deleteReservationFromSupabase]);
+  // ===== Toast helpers =====
+  const pushToast = useCallback((message: string, kind: Toast['kind'] = 'success') => {
+    const id = uid('toast');
+    setToasts((t) => [...t, { id, message, kind }]);
+    setTimeout(() => {
+      setToasts((t) => t.filter((x) => x.id !== id));
+    }, 3200);
+  }, []);
+  const dismissToast = useCallback((id: string) => {
+    setToasts((t) => t.filter((x) => x.id !== id));
+  }, []);
+
+  // ===== Notification helper =====
+  const sendTelegramNotification = useCallback(
+    async (title: string, body: string) => {
+      if (!supabaseConfigured) return;
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/telegram-notify`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({ title, body }),
+        });
+      } catch {
+        // silent fail — Telegram is a best-effort notification channel
+      }
+    },
+    [],
+  );
+
+  const addNotification = useCallback(
+    (n: Omit<AppNotification, 'id' | 'createdAt' | 'read'>) => {
+      setNotifications((prev) => [
+        {
+          ...n,
+          id: uid('nt'),
+          createdAt: Date.now(),
+          read: false,
+        },
+        ...prev,
+      ]);
+      // Forward admin-relevant notifications to Telegram
+      const adminKinds: AppNotification['kind'][] = [
+        'reservation_new',
+        'matching_new',
+        'waiting_promoted',
+        'waiting_timeout',
+      ];
+      if (adminKinds.includes(n.kind)) {
+        void sendTelegramNotification(n.title, n.body);
+      }
+    },
+    [sendTelegramNotification],
+  );
+
+  const getUser = useCallback(
+    (id: string) => users.find((u) => u.id === id),
+    [users],
+  );
+
+  const updateCurrentUser = useCallback(
+    (patch: Partial<Pick<User, 'name' | 'nickname' | 'phone' | 'profileImg' | 'career' | 'ntrp' | 'hand' | 'gamePreference' | 'bio'>>) => {
+      setUsers((prev) => prev.map((u) => (u.id === currentUserId ? { ...u, ...patch } : u)));
+    },
+    [currentUserId],
+  );
+
+  const [pensionWeekdayPrice, setPensionWeekdayPrice] = useState(PENSION_WEEKDAY_PRICE);
+  const [pensionWeekendPrice, setPensionWeekendPrice] = useState(PENSION_WEEKEND_PRICE);
+  const [pensionWeekdayBaseCapacity, setPensionWeekdayBaseCapacity] = useState(4);
+  const [pensionWeekendBaseCapacity, setPensionWeekendBaseCapacity] = useState(4);
+  const [pensionPriceOverrides, setPensionPriceOverrides] = useState<Record<string, number>>({});
+  const [courtPricing, setCourtPricing] = useState<CourtPricing>(DEFAULT_COURT_PRICING);
+  const [bbqPricing, setBbqPricing] = useState<BBQPricing>(DEFAULT_BBQ_PRICING);
+  const [bannerImageUrl, setBannerImageUrl] = useState<string | null>(null);
+  const [bannerGradientColors, setBannerGradientColors] = useState<{ from: string; via: string; to: string } | null>(null);
+  const [logoImageUrl, setLogoImageUrl] = useState<string | null>(null);
+  const [bankAccount, setBankAccount] = useState(BANK_ACCOUNT);
+  const [courtOpenDays, setCourtOpenDays] = useState(10);
+  const [pensionOpenMonths, setPensionOpenMonths] = useState(3);
+  const [bbqOpenDays, setBbqOpenDays] = useState(30);
+  const [telegramConfig, setTelegramConfig] = useState({ botToken: '', chatId: '' });
+  const [tempHolidays, setTempHolidays] = useState<string[]>([]);
+  const [dateMemos, setDateMemos] = useState<Record<string, string>>({});
+  const [focusMatchingPostId, setFocusMatchingPostId] = useState<string | null>(null);
+
+  // Load all settings (pension prices, overrides, banner, logo) from Supabase
+  const loadSettings = useCallback(async () => {
+    if (!supabaseConfigured) return;
+    const { data, error } = await supabase
+      .from('settings')
+      .select('banner_image_url, banner_gradient_colors, logo_image_url, pension_weekday_price, pension_weekend_price, pension_price_overrides, temp_holidays, bank_name, bank_account_number, bank_account_holder, court_pricing, telegram_bot_token, telegram_chat_id, court_open_days, pension_open_months, pension_weekday_base_capacity, pension_weekend_base_capacity, bbq_day_start_hour, bbq_night_start_hour, bbq_base_hours, bbq_base_capacity, bbq_day_price, bbq_night_price, bbq_extra_person_fee, bbq_extra_hour_fee, bbq_open_days')
+      .eq('id', 1)
+      .maybeSingle();
+    if (error) {
+      console.error('[loadSettings]', error.message);
+      return;
+    }
+    if (data) {
+      setBannerImageUrl(data.banner_image_url);
+      if (data.banner_gradient_colors) setBannerGradientColors(data.banner_gradient_colors as { from: string; via: string; to: string });
+      setLogoImageUrl(data.logo_image_url);
+      if (data.bank_name || data.bank_account_number || data.bank_account_holder) {
+        setBankAccount({
+          bank: data.bank_name || BANK_ACCOUNT.bank,
+          number: data.bank_account_number || BANK_ACCOUNT.number,
+          holder: data.bank_account_holder || BANK_ACCOUNT.holder,
+        });
+      }
+      if (data.pension_weekday_price != null) setPensionWeekdayPrice(data.pension_weekday_price);
+      if (data.pension_weekend_price != null) setPensionWeekendPrice(data.pension_weekend_price);
+      if (data.pension_weekday_base_capacity != null) setPensionWeekdayBaseCapacity(data.pension_weekday_base_capacity);
+      if (data.pension_weekend_base_capacity != null) setPensionWeekendBaseCapacity(data.pension_weekend_base_capacity);
+      if (data.pension_price_overrides) setPensionPriceOverrides(data.pension_price_overrides as Record<string, number>);
+      if (Array.isArray(data.temp_holidays)) setTempHolidays(data.temp_holidays as string[]);
+      if (data.court_pricing) setCourtPricing(data.court_pricing as CourtPricing);
+      setTelegramConfig({
+        botToken: (data.telegram_bot_token as string) || '',
+        chatId: (data.telegram_chat_id as string) || '',
+      });
+      if (data.court_open_days != null) setCourtOpenDays(data.court_open_days as number);
+      if (data.pension_open_months != null) setPensionOpenMonths(data.pension_open_months as number);
+      if (data.bbq_day_start_hour != null || data.bbq_night_start_hour != null) {
+        setBbqPricing(prev => ({
+          ...prev,
+          dayStartHour: data.bbq_day_start_hour ?? prev.dayStartHour,
+          nightStartHour: data.bbq_night_start_hour ?? prev.nightStartHour,
+          baseHours: data.bbq_base_hours ?? prev.baseHours,
+          baseCapacity: data.bbq_base_capacity ?? prev.baseCapacity,
+          dayPrice: data.bbq_day_price ?? prev.dayPrice,
+          nightPrice: data.bbq_night_price ?? prev.nightPrice,
+          extraPersonFee: data.bbq_extra_person_fee ?? prev.extraPersonFee,
+          extraHourFee: data.bbq_extra_hour_fee ?? prev.extraHourFee,
+          openDays: data.bbq_open_days ?? prev.openDays,
+        }));
+        if (data.bbq_open_days != null) setBbqOpenDays(data.bbq_open_days as number);
+      }
+    }
+  }, [supabaseConfigured]);
+
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    let cancelled = false;
+    let retryCount = 0;
+    const load = async () => {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('banner_image_url, banner_gradient_colors, logo_image_url, pension_weekday_price, pension_weekend_price, pension_price_overrides, temp_holidays, bank_name, bank_account_number, bank_account_holder, court_pricing, telegram_bot_token, telegram_chat_id, court_open_days, pension_open_months, pension_weekday_base_capacity, pension_weekend_base_capacity, bbq_day_start_hour, bbq_night_start_hour, bbq_base_hours, bbq_base_capacity, bbq_day_price, bbq_night_price, bbq_extra_person_fee, bbq_extra_hour_fee, bbq_open_days')
+        .eq('id', 1)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) {
+        if (retryCount < 3) {
+          retryCount++;
+          setTimeout(load, 1500 * retryCount);
+        }
+        return;
+      }
+      if (data) {
+        setBannerImageUrl(data.banner_image_url);
+        if (data.banner_gradient_colors) setBannerGradientColors(data.banner_gradient_colors as { from: string; via: string; to: string });
+        setLogoImageUrl(data.logo_image_url);
+        if (data.bank_name || data.bank_account_number || data.bank_account_holder) {
+          setBankAccount({
+            bank: data.bank_name || BANK_ACCOUNT.bank,
+            number: data.bank_account_number || BANK_ACCOUNT.number,
+            holder: data.bank_account_holder || BANK_ACCOUNT.holder,
+          });
+        }
+        if (data.pension_weekday_price != null) setPensionWeekdayPrice(data.pension_weekday_price);
+        if (data.pension_weekend_price != null) setPensionWeekendPrice(data.pension_weekend_price);
+        if (data.pension_weekday_base_capacity != null) setPensionWeekdayBaseCapacity(data.pension_weekday_base_capacity);
+        if (data.pension_weekend_base_capacity != null) setPensionWeekendBaseCapacity(data.pension_weekend_base_capacity);
+        if (data.pension_price_overrides) setPensionPriceOverrides(data.pension_price_overrides as Record<string, number>);
+        if (Array.isArray(data.temp_holidays)) setTempHolidays(data.temp_holidays as string[]);
+        if (data.court_pricing) setCourtPricing(data.court_pricing as CourtPricing);
+        setTelegramConfig({
+          botToken: (data.telegram_bot_token as string) || '',
+          chatId: (data.telegram_chat_id as string) || '',
+        });
+        if (data.court_open_days != null) setCourtOpenDays(data.court_open_days as number);
+        if (data.pension_open_months != null) setPensionOpenMonths(data.pension_open_months as number);
+        if (data.bbq_day_start_hour != null || data.bbq_night_start_hour != null) {
+          setBbqPricing(prev => ({
+            ...prev,
+            dayStartHour: data.bbq_day_start_hour ?? prev.dayStartHour,
+            nightStartHour: data.bbq_night_start_hour ?? prev.nightStartHour,
+            baseHours: data.bbq_base_hours ?? prev.baseHours,
+            baseCapacity: data.bbq_base_capacity ?? prev.baseCapacity,
+            dayPrice: data.bbq_day_price ?? prev.dayPrice,
+            nightPrice: data.bbq_night_price ?? prev.nightPrice,
+            extraPersonFee: data.bbq_extra_person_fee ?? prev.extraPersonFee,
+            extraHourFee: data.bbq_extra_hour_fee ?? prev.extraHourFee,
+            openDays: data.bbq_open_days ?? prev.openDays,
+          }));
+          if (data.bbq_open_days != null) setBbqOpenDays(data.bbq_open_days as number);
+        }
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [supabaseConfigured]);
+
+  // Realtime sync: when settings row changes on another device, reload
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    const channel = supabase
+      .channel('settings_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'settings' },
+        () => loadSettings(),
+      )
+      .subscribe((status) => {
+        if (status !== 'SUBSCRIBED') console.warn('[settings_realtime]', status);
+      });
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabaseConfigured, loadSettings]);
+
+  // Load rooms from Supabase so admin edits are shared across sessions
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    let cancelled = false;
+    let retryCount = 0;
+    const loadRooms = async () => {
+      const { data, error } = await supabase.from('rooms').select('*').order('name', { ascending: true });
+      if (cancelled) return;
+      if (error) {
+        if (retryCount < 3) {
+          retryCount++;
+          setTimeout(loadRooms, 1500 * retryCount);
+        }
+        return;
+      }
+      if (data && data.length > 0) {
+        setRooms(
+          data.map((r) => ({
+            id: r.id as string,
+            name: r.name as RoomName,
+            maxCapacity: r.max_capacity as number,
+            baseCapacity: (r.base_capacity as number) || 4,
+            description: r.description as string,
+            pricePerNight: r.price_per_night as number,
+          })),
+        );
+      }
+    };
+    loadRooms();
+    const channel = supabase
+      .channel('rooms_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'rooms' },
+        () => loadRooms(),
+      )
+      .subscribe((status) => {
+        if (status !== 'SUBSCRIBED') console.warn('[rooms_realtime]', status);
+      });
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const updateRoom = useCallback(
+    (id: string, patch: Partial<Pick<Room, 'maxCapacity' | 'description'>>) => {
+      const original = rooms.find((r) => r.id === id);
+      setRooms((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+      if (supabaseConfigured) {
+        const row: Record<string, unknown> = {
+          id,
+          name: original?.name ?? '',
+          max_capacity: patch.maxCapacity != null ? patch.maxCapacity : original?.maxCapacity ?? 8,
+          description: patch.description != null ? patch.description : original?.description ?? '',
+          price_per_night: original?.pricePerNight ?? 0,
+          updated_at: new Date().toISOString(),
+        };
+        supabase.from('rooms').upsert(row).eq('id', id).then(({ error }) => {
+          if (error) {
+            if (original) setRooms((prev) => prev.map((r) => (r.id === id ? original : r)));
+            pushToast('객실 정보 저장 실패', 'error');
+          } else {
+            pushToast('객실 정보가 변경되었습니다.');
+          }
+        });
+      } else {
+        pushToast('객실 정보가 변경되었습니다.');
+      }
+    },
+    [pushToast, rooms],
+  );
+
+  const getPensionPrice = useCallback(
+    (dateStr: string) => {
+      if (pensionPriceOverrides[dateStr] != null) return pensionPriceOverrides[dateStr];
+      const isHolidayDate = isPensionWeekendOrHoliday(dateStr) || tempHolidays.includes(dateStr);
+      return isHolidayDate ? pensionWeekendPrice : pensionWeekdayPrice;
+    },
+    [pensionWeekdayPrice, pensionWeekendPrice, pensionPriceOverrides, tempHolidays],
+  );
+
+  const updatePensionPrice = useCallback(
+    (weekday: number, weekend: number) => {
+      setPensionWeekdayPrice(weekday);
+      setPensionWeekendPrice(weekend);
+      if (supabaseConfigured) {
+        supabase
+          .from('settings')
+          .upsert({
+            id: 1,
+            pension_weekday_price: weekday,
+            pension_weekend_price: weekend,
+            updated_at: new Date().toISOString(),
+          })
+          .then(({ error }) => {
+            if (error) pushToast('펜션 요금 저장 실패', 'error');
+          });
+      }
+      pushToast('펜션 기본 요금이 변경되었습니다.');
+    },
+    [pushToast],
+  );
+
+  const getBaseCapacityForDate = useCallback(
+    (dateStr: string) => {
+      const isHolidayDate = isPensionWeekendOrHoliday(dateStr) || tempHolidays.includes(dateStr);
+      return isHolidayDate ? pensionWeekendBaseCapacity : pensionWeekdayBaseCapacity;
+    },
+    [pensionWeekdayBaseCapacity, pensionWeekendBaseCapacity, tempHolidays],
+  );
+
+  const updatePensionBaseCapacity = useCallback(
+    (weekday: number, weekend: number) => {
+      setPensionWeekdayBaseCapacity(weekday);
+      setPensionWeekendBaseCapacity(weekend);
+      if (supabaseConfigured) {
+        supabase
+          .from('settings')
+          .upsert({
+            id: 1,
+            pension_weekday_base_capacity: weekday,
+            pension_weekend_base_capacity: weekend,
+            updated_at: new Date().toISOString(),
+          })
+          .then(({ error }) => {
+            if (error) pushToast('기준인원 저장 실패', 'error');
+          });
+      }
+      pushToast('펜션 기준인원이 변경되었습니다.');
+    },
+    [pushToast],
+  );
+
+  const setPensionPriceForDate = useCallback(
+    (dateStr: string, price: number) => {
+      setPensionPriceOverrides((prev) => {
+        const next = { ...prev, [dateStr]: price };
+        if (supabaseConfigured) {
+          supabase
+            .from('settings')
+            .upsert({
+              id: 1,
+              pension_price_overrides: next,
+              updated_at: new Date().toISOString(),
+            })
+            .then(({ error }) => {
+              if (error) pushToast('개별 요금 저장 실패', 'error');
+            });
+        }
+        return next;
+      });
+      pushToast(`${dateStr} 요금이 설정되었습니다.`);
+    },
+    [pushToast],
+  );
+
+  const removePensionPriceOverride = useCallback(
+    (dateStr: string) => {
+      setPensionPriceOverrides((prev) => {
+        const next = { ...prev };
+        delete next[dateStr];
+        if (supabaseConfigured) {
+          supabase
+            .from('settings')
+            .upsert({
+              id: 1,
+              pension_price_overrides: next,
+              updated_at: new Date().toISOString(),
+            })
+            .then(({ error }) => {
+              if (error) pushToast('개별 요금 삭제 실패', 'error');
+            });
+        }
+        return next;
+      });
+      pushToast(`${dateStr} 개별 요금이 삭제되었습니다.`, 'info');
+    },
+    [pushToast],
+  );
+
+  const updateCourtPricing = useCallback(
+    (pricing: CourtPricing) => {
+      setCourtPricing(pricing);
+      if (supabaseConfigured) {
+        supabase
+          .from('settings')
+          .upsert({
+            id: 1,
+            court_pricing: pricing,
+            updated_at: new Date().toISOString(),
+          })
+          .then(({ error }) => {
+            if (error) pushToast('코트 요금 저장 실패', 'error');
+          });
+      }
+      pushToast('코트 대관 요금이 변경되었습니다.');
+    },
+    [pushToast],
+  );
+
+  const updateBBQPricing = useCallback(
+    (pricing: BBQPricing) => {
+      setBbqPricing(pricing);
+      setBbqOpenDays(pricing.openDays);
+      if (supabaseConfigured) {
+        supabase
+          .from('settings')
+          .upsert({
+            id: 1,
+            bbq_day_start_hour: pricing.dayStartHour,
+            bbq_night_start_hour: pricing.nightStartHour,
+            bbq_base_hours: pricing.baseHours,
+            bbq_base_capacity: pricing.baseCapacity,
+            bbq_day_price: pricing.dayPrice,
+            bbq_night_price: pricing.nightPrice,
+            bbq_extra_person_fee: pricing.extraPersonFee,
+            bbq_extra_hour_fee: pricing.extraHourFee,
+            bbq_open_days: pricing.openDays,
+            updated_at: new Date().toISOString(),
+          })
+          .then(({ error }) => {
+            if (error) pushToast('바베큐패키지 설정 저장 실패', 'error');
+          });
+      }
+      pushToast('바베큐패키지 설정이 변경되었습니다.');
+    },
+    [pushToast],
+  );
+
+  const updateBannerImage = useCallback(
+    (url: string | null) => {
+      setBannerImageUrl(url);
+      if (supabaseConfigured) {
+        supabase
+          .from('settings')
+          .upsert({
+            id: 1,
+            banner_image_url: url,
+            updated_at: new Date().toISOString(),
+          })
+          .then(({ error }) => {
+            if (error) pushToast('배너 이미지 저장 실패', 'error');
+          });
+      }
+      pushToast(url ? '배너 이미지가 변경되었습니다.' : '배너 이미지가 초기화되었습니다.');
+    },
+    [pushToast],
+  );
+
+  const updateBannerGradientColors = useCallback(
+    (colors: { from: string; via: string; to: string } | null) => {
+      setBannerGradientColors(colors);
+      if (supabaseConfigured) {
+        supabase
+          .from('settings')
+          .upsert({
+            id: 1,
+            banner_gradient_colors: colors,
+            updated_at: new Date().toISOString(),
+          })
+          .then(({ error }) => {
+            if (error) pushToast('배너 그라데이션 저장 실패', 'error');
+          });
+      }
+      pushToast(colors ? '배너 그라데이션이 변경되었습니다.' : '배너 그라데이션이 초기화되었습니다.');
+    },
+    [pushToast],
+  );
+
+  const updateLogoImage = useCallback(
+    (url: string | null) => {
+      setLogoImageUrl(url);
+      if (supabaseConfigured) {
+        supabase
+          .from('settings')
+          .upsert({
+            id: 1,
+            logo_image_url: url,
+            updated_at: new Date().toISOString(),
+          })
+          .then(({ error }) => {
+            if (error) pushToast('로고 이미지 저장 실패', 'error');
+          });
+      }
+      pushToast(url ? '로고 이미지가 변경되었습니다.' : '로고 이미지가 초기화되었습니다.');
+    },
+    [pushToast],
+  );
+
+  const updateBankAccount = useCallback(
+    (acct: { bank: string; number: string; holder: string }) => {
+      setBankAccount(acct);
+      if (supabaseConfigured) {
+        supabase
+          .from('settings')
+          .upsert({
+            id: 1,
+            bank_name: acct.bank,
+            bank_account_number: acct.number,
+            bank_account_holder: acct.holder,
+            updated_at: new Date().toISOString(),
+          })
+          .then(({ error }) => {
+            if (error) pushToast('입금 계좌 저장 실패', 'error');
+          });
+      }
+      pushToast('입금 계좌가 변경되었습니다.');
+    },
+    [pushToast],
+  );
+
+  const updateTelegramConfig = useCallback(
+    (cfg: { botToken: string; chatId: string }) => {
+      setTelegramConfig(cfg);
+      if (supabaseConfigured) {
+        supabase
+          .from('settings')
+          .upsert({
+            id: 1,
+            telegram_bot_token: cfg.botToken,
+            telegram_chat_id: cfg.chatId,
+            updated_at: new Date().toISOString(),
+          })
+          .then(({ error }) => {
+            if (error) pushToast('텔레그램 설정 저장 실패', 'error');
+          });
+      }
+      pushToast('텔레그램 설정이 변경되었습니다.');
+    },
+    [pushToast],
+  );
+
+  const updateReservationLimits = useCallback(
+    (courtDays: number, pensionMonths: number) => {
+      setCourtOpenDays(courtDays);
+      setPensionOpenMonths(pensionMonths);
+      if (supabaseConfigured) {
+        supabase
+          .from('settings')
+          .upsert({
+            id: 1,
+            court_open_days: courtDays,
+            pension_open_months: pensionMonths,
+            updated_at: new Date().toISOString(),
+          })
+          .then(({ error }) => {
+            if (error) pushToast('예약 오픈 설정 저장 실패', 'error');
+          });
+      }
+      pushToast('예약 오픈 기간이 변경되었습니다.');
+    },
+    [pushToast],
+  );
+
+  const sendTelegramTest = useCallback(async (cfg?: { botToken: string; chatId: string }): Promise<{ ok: boolean; error?: string }> => {
+    if (!supabaseConfigured) return { ok: false, error: 'Supabase가 연결되지 않았습니다.' };
+    const token = cfg?.botToken || telegramConfig.botToken;
+    const chatId = cfg?.chatId || telegramConfig.chatId;
+    if (!token || !chatId) return { ok: false, error: 'Bot Token과 Chat ID를 모두 입력하세요.' };
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/telegram-notify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          title: '테스트 알림',
+          body: '텔레그램 알림 연동이 정상적으로 작동합니다.',
+          token,
+          chatId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { ok: false, error: data.error || data.detail || '전송 실패' };
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  }, [telegramConfig]);
+
+  const toggleHoliday = useCallback(
+    (dateStr: string) => {
+      setTempHolidays((prev) => {
+        const next = prev.includes(dateStr)
+          ? prev.filter((d) => d !== dateStr)
+          : [...prev, dateStr].sort();
+        if (supabaseConfigured) {
+          supabase
+            .from('settings')
+            .upsert({
+              id: 1,
+              temp_holidays: next,
+              updated_at: new Date().toISOString(),
+            })
+            .then(({ error }) => {
+              if (error) pushToast('임시 공휴일 저장 실패', 'error');
+            });
+        }
+        return next;
+      });
+    },
+    [pushToast],
+  );
+
+  const isHoliday = useCallback(
+    (dateStr: string): boolean => isWeekendOrHoliday(dateStr) || tempHolidays.includes(dateStr),
+    [tempHolidays],
+  );
+
+  // Load date memos from Supabase
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    (async () => {
+      const { data } = await supabase.from('date_memos').select('date, content');
+      if (data) {
+        const map: Record<string, string> = {};
+        for (const m of data) {
+          map[m.date as string] = m.content as string;
+        }
+        setDateMemos(map);
+      }
+    })();
+    const channel = supabase
+      .channel('date_memos_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'date_memos' },
+        async () => {
+          const { data } = await supabase.from('date_memos').select('date, content');
+          if (data) {
+            const map: Record<string, string> = {};
+            for (const m of data) {
+              map[m.date as string] = m.content as string;
+            }
+            setDateMemos(map);
+          }
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const getDateMemo = useCallback(
+    (dateStr: string): string => dateMemos[dateStr] ?? '',
+    [dateMemos],
+  );
+
+  const saveDateMemo = useCallback(
+    (dateStr: string, content: string) => {
+      const trimmed = content.trim();
+      setDateMemos((prev) => {
+        const next = { ...prev };
+        if (trimmed) {
+          next[dateStr] = trimmed;
+        } else {
+          delete next[dateStr];
+        }
+        return next;
+      });
+      if (supabaseConfigured) {
+        if (trimmed) {
+          supabase
+            .from('date_memos')
+            .upsert({
+              id: `memo-${dateStr}`,
+              date: dateStr,
+              content: trimmed,
+              updated_at: Date.now(),
+            })
+            .then(({ error }) => {
+              if (error) pushToast('메모 저장 실패: ' + error.message, 'error');
+            });
+        } else {
+          supabase.from('date_memos').delete().eq('id', `memo-${dateStr}`).then(({ error }) => {
+            if (error) pushToast('메모 삭제 실패: ' + error.message, 'error');
+          });
+        }
+      }
+      pushToast(trimmed ? '메모가 저장되었습니다.' : '메모가 삭제되었습니다.', 'info');
+    },
+    [pushToast],
+  );
+
+  // ===== Business rule: mutual exclusion =====
+  // Pension reserved (예약완료) -> court slots from 15:00 that day to 11:00 next day blocked
+  // Pension on `date` is blocked by court if: court on `date` uses slots at/after
+  // 15:00 (check-in conflict), OR court on `date+1` uses slots before 11:00
+  // (check-out morning conflict).
+  const isPensionBlockedByCourt = useCallback(
+    (date: string, roomName: RoomName) => {
+      const building = roomName[0];
+      const nextDate = addDaysToYMD(date, 1);
+      const courtSameDay = reservations.some(
+        (r) =>
+          r.type === 'court' &&
+          r.date === date &&
+          r.status === '예약완료' &&
+          r.waitingSequence === null &&
+          r.timeSlot &&
+          r.targetId[0] === building &&
+          parseInt(r.timeSlot.split(':')[0], 10) >= PENSION_BLOCK_START_HOUR,
+      );
+      if (courtSameDay) return true;
+      const courtNextDay = reservations.some(
+        (r) =>
+          r.type === 'court' &&
+          r.date === nextDate &&
+          r.status === '예약완료' &&
+          r.waitingSequence === null &&
+          r.timeSlot &&
+          r.targetId[0] === building &&
+          parseInt(r.timeSlot.split(':')[0], 10) < PENSION_BLOCK_END_HOUR,
+      );
+      return courtNextDay;
+    },
+    [reservations],
+  );
+
+  // ===== Game day event blocking =====
+  // Active game day events (not cancelled/ended) block court/pension/BBQ.
+  const activeGameDayEvents = useCallback(
+    () => gameDayEvents.filter((e) => e.status !== '취소' && e.status !== '종료'),
+    [gameDayEvents],
+  );
+
+  const getGameDayBlockedHours = useCallback(
+    (date: string, court: CourtName): Set<number> => {
+      const blocked = new Set<number>();
+      for (const ev of activeGameDayEvents()) {
+        if (ev.date !== date) continue;
+        const courts = ev.court.split(',').map((c) => c.trim());
+        if (!courts.includes(court)) continue;
+        const start = parseInt(ev.startTime.split(':')[0], 10);
+        const end = parseInt(ev.endTime.split(':')[0], 10);
+        for (let h = start; h < end; h++) blocked.add(h);
+      }
+      return blocked;
+    },
+    [activeGameDayEvents],
+  );
+
+  const isCourtSlotBlockedByGameDay = useCallback(
+    (date: string, court: CourtName, slot: string): boolean => {
+      const startHour = parseInt(slot.split(':')[0], 10);
+      return getGameDayBlockedHours(date, court).has(startHour);
+    },
+    [getGameDayBlockedHours],
+  );
+
+  const isPensionBlockedByGameDay = useCallback(
+    (date: string, roomName: RoomName): boolean => {
+      const building = roomName[0];
+      for (const ev of activeGameDayEvents()) {
+        if (ev.date !== date) continue;
+        const courts = ev.court.split(',').map((c) => c.trim());
+        const usesSameBuilding = courts.some((c) => c[0] === building);
+        if (!usesSameBuilding) continue;
+        const start = parseInt(ev.startTime.split(':')[0], 10);
+        const end = parseInt(ev.endTime.split(':')[0], 10);
+        if (start >= 15 || end > 11) return true;
+      }
+      return false;
+    },
+    [activeGameDayEvents],
+  );
+
+  // Court on `date` is affected by pension if: pension on `date` (blocks slots
+  // at/after 15:00) OR pension on `date-1` (blocks slots before 11:00 checkout).
+  const isCourtBlockedByPension = useCallback(
+    (date: string, court: CourtName) => {
+      const courtBuilding = court[0];
+      const prevDate = addDaysToYMD(date, -1);
+      const pensionSameDay = reservations.some(
+        (r) =>
+          r.type === 'pension' &&
+          r.date === date &&
+          r.status === '예약완료' &&
+          r.waitingSequence === null &&
+          r.targetLabel[0] === courtBuilding,
+      );
+      const pensionPrevDay = reservations.some(
+        (r) =>
+          r.type === 'pension' &&
+          r.date === prevDate &&
+          r.status === '예약완료' &&
+          r.waitingSequence === null &&
+          r.targetLabel[0] === courtBuilding,
+      );
+      return pensionSameDay || pensionPrevDay;
+    },
+    [reservations],
+  );
+
+  // Returns true if a specific court slot is blocked by a pension reservation's
+  // 15:00 ~ next-day 11:00 usage window.
+  const isCourtSlotBlockedByPension = useCallback(
+    (date: string, court: CourtName, slot: string): boolean => {
+      const courtBuilding = court[0];
+      const startHour = parseInt(slot.split(':')[0], 10);
+      // Pension on same date blocks slots at/after 15:00 (check-in).
+      if (startHour >= PENSION_BLOCK_START_HOUR) {
+        const pensionSameDay = reservations.some(
+          (r) =>
+            r.type === 'pension' &&
+            r.date === date &&
+            r.status === '예약완료' &&
+            r.waitingSequence === null &&
+            r.targetLabel[0] === courtBuilding,
+        );
+        if (pensionSameDay) return true;
+      }
+      // Pension on previous date blocks slots before 11:00 (check-out morning).
+      if (startHour < PENSION_BLOCK_END_HOUR) {
+        const prevDate = addDaysToYMD(date, -1);
+        const pensionPrevDay = reservations.some(
+          (r) =>
+            r.type === 'pension' &&
+            r.date === prevDate &&
+            r.status === '예약완료' &&
+            r.waitingSequence === null &&
+            r.targetLabel[0] === courtBuilding,
+        );
+        if (pensionPrevDay) return true;
+      }
+      return false;
+    },
+    [reservations],
+  );
+
+
+
+  const getPensionStatusForDate = useCallback(
+    (date: string, roomName: RoomName) => {
+      const room = rooms.find((r) => r.name === roomName);
+      const roomId = room?.id;
+      const primaries = reservations.filter(
+        (r) =>
+          r.type === 'pension' &&
+          r.date === date &&
+          r.targetId === roomId &&
+          r.waitingSequence === null &&
+          r.status !== '취소',
+      );
+      const waitings = reservations.filter(
+        (r) =>
+          r.type === 'pension' &&
+          r.date === date &&
+          r.targetId === roomId &&
+          r.waitingSequence !== null &&
+          r.status !== '취소',
+      );
+      const completed = primaries.find((r) => r.status === '예약완료');
+      if (completed) {
+        return { status: 'booked' as const, reservation: completed, waitingCount: waitings.length };
+      }
+      const pending = primaries.find((r) => r.status === '신청' || r.status === '입금대기' || r.status === '승인대기');
+      if (pending) {
+        return { status: 'pending' as const, reservation: pending, waitingCount: waitings.length };
+      }
+      if (waitings.length > 0) {
+        return { status: 'full' as const, waitingCount: waitings.length };
+      }
+      return { status: 'available' as const, waitingCount: 0 };
+    },
+    [rooms, reservations],
+  );
+
+  const getCourtSlotStatus = useCallback(
+    (date: string, court: CourtName, slot: string): 'available' | 'booked' | 'pending' | 'blocked' => {
+      // Blocked by pension (slot-level: 15:00 ~ next-day 11:00)
+      if (isCourtSlotBlockedByPension(date, court, slot)) return 'blocked';
+      // Blocked by game day event
+      if (isCourtSlotBlockedByGameDay(date, court, slot)) return 'blocked';
+      const found = reservations.find(
+        (r) =>
+          r.type === 'court' &&
+          r.date === date &&
+          r.targetId === court &&
+          r.timeSlot === slot &&
+          r.waitingSequence === null &&
+          r.status !== '취소',
+      );
+      if (!found) return 'available';
+      if (found.status === '예약완료' || found.status === '이용완료') return 'booked';
+      return 'pending';
+    },
+    [reservations, isCourtSlotBlockedByPension, isCourtSlotBlockedByGameDay],
+  );
+
+  const getReservationsByDate = useCallback(
+    (date: string) => reservations.filter((r) => r.date === date && r.status !== '취소'),
+    [reservations],
+  );
+
+  const getMatchingsByDate = useCallback(
+    (date: string) => matchingPosts.filter((m) => m.date === date),
+    [matchingPosts],
+  );
+
+  // ===== Create pension reservation =====
+  const createPensionReservation = useCallback(
+    (input: { roomId: string; date: string; capacity: number; depositorName?: string; depositorPhone?: string }) => {
+      const room = rooms.find((r) => r.id === input.roomId);
+      if (!room) return { ok: false, reason: '존재하지 않는 객실입니다.' };
+      if (input.capacity < 1 || input.capacity > room.maxCapacity) {
+        return { ok: false, reason: `인원은 1~${room.maxCapacity}명이어야 합니다.` };
+      }
+      // Blocked by court?
+      if (isPensionBlockedByCourt(input.date, room.name)) {
+        return { ok: false, reason: '해당 날짜에 코트 예약이 완료되어 펜션 예약이 불가합니다.' };
+      }
+      // Blocked by game day event?
+      if (isPensionBlockedByGameDay(input.date, room.name)) {
+        return { ok: false, reason: '해당 날짜에 게임데이 일정이 있어 펜션 예약이 불가합니다.' };
+      }
+      // Check existing
+      const existing = reservations.filter(
+        (r) =>
+          r.type === 'pension' &&
+          r.date === input.date &&
+          r.targetId === input.roomId &&
+          r.waitingSequence === null &&
+          r.status !== '취소',
+      );
+      const hasCompleted = existing.some((r) => r.status === '예약완료');
+      const hasPending = existing.some((r) => r.status === '신청' || r.status === '입금대기' || r.status === '승인대기');
+
+      const batchId = uid('b');
+      const reservation: Reservation = {
+        id: uid('r'),
+        type: 'pension',
+        userId: currentUserId,
+        targetId: input.roomId,
+        targetLabel: room.name,
+        date: input.date,
+        capacity: input.capacity,
+        status: hasCompleted ? '신청' : '신청', // 신청 first; admin moves to 입금대기/승인대기/예약완료
+        waitingSequence: hasCompleted || hasPending ? (reservations.filter((r) => r.type === 'pension' && r.date === input.date && r.targetId === input.roomId && r.waitingSequence !== null).length + 1) : null,
+        amount: getPensionPrice(input.date) + Math.max(0, input.capacity - getBaseCapacityForDate(input.date)) * EXTRA_PERSON_FEE,
+        createdAt: Date.now(),
+        batchId,
+        depositorName: input.depositorName,
+        depositorPhone: input.depositorPhone,
+      };
+
+      setReservations((prev) => [...prev, reservation]);
+      upsertReservationToSupabase(reservation);
+      addNotification({
+        kind: 'reservation_new',
+        title: '새 펜션 예약 신청',
+        body: `${getUser(currentUserId)?.name}님이 ${room.name} 펜션 예약을 신청했습니다.${reservation.waitingSequence ? ` (대기 ${reservation.waitingSequence}순위)` : ''}`,
+        targetUserId: currentUserId,
+      });
+      // Customer-facing Telegram confirmation
+      const [yy, mm, dd] = input.date.split('-');
+      const userName = input.depositorName || getUser(currentUserId)?.name || '회원';
+      void sendTelegramNotification(
+        '펜션 예약 안내',
+        `안녕하세요, 플테하(플레이 테니스 하우스) 입니다.\n ${userName}님 ${parseInt(mm, 10)}월 ${parseInt(dd, 10)}일 ${room.name} ${input.capacity}명 예약 되셨습니다.😊\n이용 금액은 예약일로부터 48시간 안에 결제해 주셔야합니다. \n결제 확인이 안 될 경우, 취소 될 수 있는 점 양해 부탁드립니다.\n오늘도 즐거운 하루 되세요~♡\n                                 - 플테하 -`,
+      );
+      pushToast(
+        reservation.waitingSequence
+          ? `예약 대기 신청 완료! 대기 ${reservation.waitingSequence}순위`
+          : '펜션 예약 신청 완료! 입금 후 관리자 승인을 기다려주세요.',
+      );
+      return { ok: true, reservation };
+    },
+    [rooms, reservations, currentUserId, isPensionBlockedByCourt, isPensionBlockedByGameDay, addNotification, getUser, pushToast, upsertReservationToSupabase, sendTelegramNotification],
+  );
+
+  // ===== Create court reservation =====
+  const createCourtReservation = useCallback(
+    (input: { court: CourtName; date: string; timeSlots: string[]; depositorName?: string; depositorPhone?: string }) => {
+      if (input.timeSlots.length === 0) {
+        return { ok: false, reason: '시간대를 선택해주세요.' };
+      }
+      for (const slot of input.timeSlots) {
+        if (!COURT_TIME_SLOTS.includes(slot as (typeof COURT_TIME_SLOTS)[number])) {
+          return { ok: false, reason: '잘못된 시간대입니다.' };
+        }
+      }
+      for (const slot of input.timeSlots) {
+        const slotStatus = getCourtSlotStatus(input.date, input.court, slot);
+        if (slotStatus === 'blocked') {
+          return { ok: false, reason: `${slot}은(는) 펜션 예약(15:00~익일 11:00)으로 이용이 불가합니다.` };
+        }
+        if (slotStatus === 'booked' || slotStatus === 'pending') {
+          return { ok: false, reason: `${slot}은(는) 이미 예약되었거나 신청 중인 시간대입니다.` };
+        }
+      }
+
+      const batchId = uid('b');
+      const newReservations: Reservation[] = input.timeSlots.map((slot) => ({
+        id: uid('r'),
+        type: 'court',
+        userId: currentUserId,
+        targetId: input.court,
+        targetLabel: input.court,
+        date: input.date,
+        timeSlot: slot,
+        status: '신청',
+        waitingSequence: null,
+        amount: getCourtSlotPriceWithConfig(courtPricing, input.date, slot, tempHolidays),
+        createdAt: Date.now(),
+        batchId,
+        depositorName: input.depositorName,
+        depositorPhone: input.depositorPhone,
+      }));
+      setReservations((prev) => [...prev, ...newReservations]);
+      newReservations.forEach((r) => upsertReservationToSupabase(r));
+      addNotification({
+        kind: 'reservation_new',
+        title: '새 코트 예약 신청',
+        body: `${getUser(currentUserId)?.name}님이 ${input.court} ${input.timeSlots.join(', ')} 예약을 신청했습니다.`,
+        targetUserId: currentUserId,
+      });
+      // Customer-facing Telegram confirmation
+      const [yy, mm, dd] = input.date.split('-');
+      const userName = input.depositorName || getUser(currentUserId)?.name || '회원';
+      const slotLabel = mergeTimeSlots(input.timeSlots);
+      void sendTelegramNotification(
+        '코트 예약 안내',
+        `안녕하세요, 플테하(플레이 테니스 하우스) 입니다.\n ${userName}님 ${parseInt(mm, 10)}월 ${parseInt(dd, 10)}일 ${input.court} ${slotLabel} 예약 되셨습니다.😊\n이용 금액은 예약일로부터 24시간 안에 결제해 주셔야합니다. \n결제 확인이 안 될 경우, 취소 될 수 있는 점 양해 부탁드립니다.\n오늘도 즐거운 하루 되세요~♡\n                                 - 플테하 -`,
+      );
+      pushToast(`${input.timeSlots.length}개 시간대 코트 예약 신청 완료! 입금 후 관리자 승인을 기다려주세요.`);
+      return { ok: true, reservations: newReservations };
+    },
+    [getCourtSlotStatus, currentUserId, addNotification, getUser, pushToast, upsertReservationToSupabase, courtPricing, sendTelegramNotification],
+  );
+
+  // ===== Admin direct court reservation (bypass deposit/approval) =====
+  const createAdminCourtReservation = useCallback(
+    (input: { court: CourtName; date: string; timeSlot: string; label: string }) => {
+      if (!input.label.trim()) {
+        return { ok: false, reason: '예약자명을 입력해주세요.' };
+      }
+      const slotStatus = getCourtSlotStatus(input.date, input.court, input.timeSlot);
+      if (slotStatus === 'blocked') {
+        return { ok: false, reason: '펜션 예약으로 이용이 불가한 시간대입니다.' };
+      }
+      if (slotStatus === 'booked' || slotStatus === 'pending') {
+        return { ok: false, reason: '이미 예약되었거나 신청 중인 시간대입니다.' };
+      }
+      const reservation: Reservation = {
+        id: uid('r'),
+        type: 'court',
+        userId: currentUserId,
+        targetId: input.court,
+        targetLabel: input.court,
+        date: input.date,
+        timeSlot: input.timeSlot,
+        status: '예약완료',
+        waitingSequence: null,
+        amount: 0,
+        createdAt: Date.now(),
+        depositorName: input.label.trim(),
+      };
+      setReservations((prev) => [...prev, reservation]);
+      upsertReservationToSupabase(reservation);
+      pushToast(`관리자 예약 완료: ${input.court} ${input.timeSlot}`);
+      return { ok: true, reservation };
+    },
+    [getCourtSlotStatus, currentUserId, pushToast, upsertReservationToSupabase],
+  );
+
+  const createBBQReservation = useCallback(
+    (input: {
+      venue: BBQVenue;
+      date: string;
+      startHour: number;
+      endHour: number;
+      capacity: number;
+      depositorName?: string;
+      depositorPhone?: string;
+    }) => {
+      if (input.endHour <= input.startHour) {
+        return { ok: false, reason: '시간 선택이 올바르지 않습니다.' };
+      }
+      if (input.capacity < 1) {
+        return { ok: false, reason: '인원은 1명 이상이어야 합니다.' };
+      }
+
+      // Check for existing BBQ reservation on same date + same venue
+      const existing = reservations.find(
+        (r) =>
+          r.type === 'bbq' &&
+          r.date === input.date &&
+          r.targetId === input.venue &&
+          r.waitingSequence === null &&
+          r.status !== '취소',
+      );
+      if (existing) {
+        return { ok: false, reason: `${input.venue}에 이미 바베큐패키지 예약이 있습니다.` };
+      }
+
+      // Check if this venue has a pension reservation blocking it
+      const pensionConflict = reservations.some(
+        (r) => r.type === 'pension' && r.date === input.date && r.targetLabel === input.venue && r.waitingSequence === null && r.status !== '취소',
+      );
+      if (pensionConflict) {
+        return { ok: false, reason: `${input.venue} 펜션 예약이 있어 바베큐패키지 예약이 불가합니다.` };
+      }
+
+      // Check court reservations that overlap in time with the BBQ time range
+      // A동 maps to A코트, B동 maps to B코트
+      const courtForVenue = input.venue === 'A동' ? 'A코트' : 'B코트';
+      const bbqHours = new Set<number>();
+      for (let h = input.startHour; h < input.endHour; h++) bbqHours.add(h);
+      const courtConflict = reservations.some((r) => {
+        if (r.type !== 'court' || r.date !== input.date || r.waitingSequence !== null || r.status === '취소') return false;
+        if (r.targetId !== courtForVenue) return false;
+        if (!r.timeSlot) return false;
+        const slotStart = parseInt(r.timeSlot.slice(0, 2), 10);
+        const slotEnd = parseInt(r.timeSlot.slice(6, 8), 10);
+        for (let h = slotStart; h < slotEnd; h++) {
+          if (bbqHours.has(h)) return true;
+        }
+        return false;
+      });
+      if (courtConflict) {
+        return { ok: false, reason: '선택하신 시간에 코트 대관이 있어 해당 시간은 예약이 불가합니다.' };
+      }
+
+      // Check game day event overlap
+      const gameDayBlocked = getGameDayBlockedHours(input.date, courtForVenue);
+      let gameDayConflict = false;
+      for (let h = input.startHour; h < input.endHour; h++) {
+        if (gameDayBlocked.has(h)) { gameDayConflict = true; break; }
+      }
+      if (gameDayConflict) {
+        return { ok: false, reason: '선택하신 시간에 게임데이 일정이 있어 해당 시간은 예약이 불가합니다.' };
+      }
+
+      const { total } = computeBBQPrice(input.startHour, input.endHour, input.capacity, bbqPricing);
+      const timeSlot = `${String(input.startHour).padStart(2, '0')}:00-${String(input.endHour).padStart(2, '0')}:00`;
+
+      const reservation: Reservation = {
+        id: uid('r'),
+        type: 'bbq',
+        userId: currentUserId,
+        targetId: input.venue,
+        targetLabel: `${input.venue} 바베큐패키지`,
+        date: input.date,
+        timeSlot,
+        capacity: input.capacity,
+        status: '신청',
+        waitingSequence: null,
+        amount: total,
+        createdAt: Date.now(),
+        depositorName: input.depositorName,
+        depositorPhone: input.depositorPhone,
+      };
+      setReservations((prev) => [...prev, reservation]);
+      upsertReservationToSupabase(reservation);
+
+      const userName = input.depositorName || getUser(currentUserId)?.name || '회원';
+      void sendTelegramNotification(
+        '바베큐패키지 예약 신청',
+        `${userName}님 ${input.venue} ${input.date} ${timeSlot} ${input.capacity}명 바베큐패키지 예약 신청이 접수되었습니다.`,
+      );
+
+      pushToast('바베큐패키지 예약 신청이 완료되었습니다.');
+      return { ok: true, reservation };
+    },
+    [reservations, currentUserId, bbqPricing, getUser, pushToast, upsertReservationToSupabase, sendTelegramNotification, getGameDayBlockedHours],
+  );
+  const requestWaiting = useCallback(
+    (reservationId: string) => {
+      const target = reservations.find((r) => r.id === reservationId);
+      if (!target) return { ok: false };
+      // count current waitings for same slot
+      const waitings = reservations.filter(
+        (r) =>
+          r.waitingSequence !== null &&
+          r.status !== '취소' &&
+          r.type === target.type &&
+          r.date === target.date &&
+          r.targetId === target.targetId &&
+          r.timeSlot === target.timeSlot,
+      );
+      const seq = waitings.length + 1;
+      const newWaiting: Reservation = {
+        ...target,
+        id: uid('r'),
+        userId: currentUserId,
+        status: '신청',
+        waitingSequence: seq,
+        createdAt: Date.now(),
+      };
+      setReservations((prev) => [...prev, newWaiting]);
+      upsertReservationToSupabase(newWaiting);
+      pushToast(`대기 신청 완료! 대기 ${seq}순위`);
+      return { ok: true, sequence: seq };
+    },
+    [reservations, currentUserId, pushToast, upsertReservationToSupabase],
+  );
+
+  // ===== Waiting handoff with timeout =====
+  const promoteNextWaiting = useCallback(
+    (cancelledReservation: Reservation) => {
+      // Find next waiting for same slot
+      const candidates = reservations
+        .filter(
+          (r) =>
+            r.waitingSequence !== null &&
+            r.status !== '취소' &&
+            r.type === cancelledReservation.type &&
+            r.date === cancelledReservation.date &&
+            r.targetId === cancelledReservation.targetId &&
+            r.timeSlot === cancelledReservation.timeSlot,
+        )
+        .sort((a, b) => (a.waitingSequence || 0) - (b.waitingSequence || 0));
+
+      const next = candidates[0];
+      if (!next) return;
+
+      const timeoutUntil = Date.now() + 2 * 60 * 60 * 1000; // 2 hours
+      setReservations((prev) =>
+        prev.map((r) =>
+          r.id === next.id
+            ? { ...r, status: '입금대기', waitingSequence: null, depositTimeoutUntil: timeoutUntil }
+            : r,
+        ),
+      );
+      upsertReservationToSupabase({ ...next, status: '입금대기', waitingSequence: null, depositTimeoutUntil: timeoutUntil });
+      addNotification({
+        kind: 'waiting_promoted',
+        title: '대기 1순위 승격',
+        body: `${getUser(next.userId)?.name}님, 예약이 취소되어 입금 대기로 승격되었습니다. 2시간 내 입금해주세요.`,
+        targetUserId: next.userId,
+      });
+      pushToast(`${getUser(next.userId)?.name}님에게 대기가 이양되었습니다. (2시간 입금 대기)`);
+
+      // Set timeout to auto-pass to next
+      if (timersRef.current[next.id]) clearTimeout(timersRef.current[next.id]);
+      timersRef.current[next.id] = setTimeout(() => {
+        setReservations((prev) => {
+          const cur = prev.find((r) => r.id === next.id);
+          if (!cur || cur.status !== '입금대기') return prev;
+          // cancel this one, promote next
+          addNotification({
+            kind: 'waiting_timeout',
+            title: '입금 대기 시간 초과',
+            body: `${getUser(next.userId)?.name}님의 입금 대기 시간이 초과되어 다음 대기자에게 이양됩니다.`,
+            targetUserId: next.userId,
+          });
+          pushToast(`${getUser(next.userId)?.name}님 입금 시간 초과, 다음 대기자에게 이양`, 'error');
+          // recursively promote
+          setTimeout(() => promoteNextWaiting({ ...cur, status: '취소' }), 50);
+          return prev.map((r) => (r.id === next.id ? { ...r, status: '취소', depositTimeoutUntil: null, updatedAt: Date.now() } : r));
+        });
+      }, 2 * 60 * 60 * 1000);
+    },
+    [reservations, addNotification, getUser, pushToast, upsertReservationToSupabase],
+  );
+
+  // ===== Cancel reservation =====
+  const cancelReservation = useCallback(
+    (id: string) => {
+      const target = reservations.find((r) => r.id === id);
+      if (!target) return;
+      setReservations((prev) => prev.filter((r) => r.id !== id));
+      deleteReservationFromSupabase(id);
+      if (target.waitingSequence === null && target.status === '예약완료') {
+        setTimeout(() => promoteNextWaiting(target), 30);
+      }
+      addNotification({
+        kind: 'reservation_cancelled',
+        title: '예약 취소',
+        body: `${getUser(target.userId)?.name}님의 ${target.targetLabel} 예약이 취소되었습니다.`,
+        targetUserId: target.userId,
+      });
+      pushToast('예약이 취소되었습니다.', 'info');
+    },
+    [reservations, promoteNextWaiting, addNotification, getUser, pushToast, deleteReservationFromSupabase],
+  );
+
+  // ===== Approve reservation (admin) =====
+  const approveReservation = useCallback(
+    (id: string) => {
+      const target = reservations.find((r) => r.id === id);
+      if (!target) return;
+      const approved: Reservation = { ...target, status: '예약완료' as ReservationStatus };
+      setReservations((prev) =>
+        prev.map((r) => (r.id === id ? approved : r)),
+      );
+      upsertReservationToSupabase(approved);
+      addNotification({
+        kind: 'reservation_approved',
+        title: '예약 승인 완료',
+        body: `${getUser(target.userId)?.name}님의 ${target.targetLabel} 예약이 승인(예약완료) 처리되었습니다.`,
+        targetUserId: target.userId,
+      });
+      pushToast(`${getUser(target.userId)?.name}님 예약 승인 완료`);
+
+      // Customer-facing Telegram: reservation confirmed
+      const [aYY, aMM, aDD] = target.date.split('-');
+      const aUserName = target.depositorName || getUser(target.userId)?.name || '회원';
+      const capacityLabel = target.type === 'pension' ? ` ${target.capacity}명` : '';
+      const timeLabel = target.timeSlot || '';
+      if (target.type === 'pension') {
+        void sendTelegramNotification(
+          '예약완료 안내',
+          `예약완료 안내\n ${aUserName}님 ${parseInt(aMM, 10)}월 ${parseInt(aDD, 10)}일 ${target.targetLabel}${capacityLabel} 예약완료 되셨습니다.\n-입실시간: 예약일 PM3:00\n-퇴실시간: 다음 날 AM 11:00\n-코트이용시간: PM3:00-AM12:00/ 퇴실 시간전까지\n바베큐장은 실내 바베큐장으로 숯불 이용 불가 한 점 양해 부탁드립니다.\n(고기불판, 그릇, 가스 등의 기본 시설은 제공됩니다.)\n추가 인원이 있을 시 반드시 미리 공지해 주시기 바랍니다.\n즐거운 하루 보내시고 예약날에 뵙겠습니다.^ㅡ^\n            - 플테하(PLAY TENNIS HOUSE) -`,
+        );
+      } else {
+        void sendTelegramNotification(
+          '예약 완료 안내',
+          ` ${aUserName}님  ${parseInt(aMM, 10)}월  ${parseInt(aDD, 10)}일  ${target.targetLabel}${capacityLabel}${timeLabel ? ` ${timeLabel}` : ''} 예약 완료 되셨습니다.\n저희 플테하(플레이 테니스 하우스) 예약해 주셔서 감사합니다. 오늘도 즐거운 하루 보내시고 예약 날에 뵙겠습니다~🤗`,
+        );
+      }
+
+      // Activate matching post if this reservation belongs to one
+      setMatchingPosts((mpPrev) => {
+        const mp = mpPrev.find((p) => p.reservationIds.includes(id));
+        if (!mp || mp.courtApproved) return mpPrev;
+        const allApproved = mp.reservationIds.every((rid) =>
+          rid === id ? true : reservations.find((r) => r.id === rid)?.status === '예약완료',
+        );
+        if (!allApproved) return mpPrev;
+        const activated = { ...mp, courtApproved: true, status: '모집중' as MatchingStatus };
+        syncMatchingPost(activated);
+        return mpPrev.map((p) => (p.id === mp.id ? activated : p));
+      });
+    },
+    [reservations, addNotification, getUser, pushToast, upsertReservationToSupabase, syncMatchingPost, sendTelegramNotification],
+  );
+
+  // ===== Approve multiple reservations at once (admin) =====
+  const approveReservations = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) return;
+      const targets = reservations.filter((r) => ids.includes(r.id));
+      if (targets.length === 0) return;
+      const firstName = getUser(targets[0].userId)?.name || '회원';
+      addNotification({
+        kind: 'reservation_approved',
+        title: '예약 승인 완료',
+        body: `${firstName}님의 예약 ${targets.length}건이 승인(예약완료) 처리되었습니다.`,
+        targetUserId: targets[0].userId,
+      });
+      pushToast(`${firstName}님 예약 ${targets.length}건 승인 완료`);
+      // Customer-facing Telegram: reservation confirmed (one per reservation)
+      for (const r of targets) {
+        const [bYY, bMM, bDD] = r.date.split('-');
+        const bUserName = r.depositorName || getUser(r.userId)?.name || '회원';
+        const capLabel = r.type === 'pension' ? ` ${r.capacity}명` : '';
+        const tLabel = r.timeSlot || '';
+        if (r.type === 'pension') {
+          void sendTelegramNotification(
+            '예약완료 안내',
+            `예약완료 안내\n ${bUserName}님 ${parseInt(bMM, 10)}월 ${parseInt(bDD, 10)}일 ${r.targetLabel}${capLabel} 예약완료 되셨습니다.\n-입실시간: 예약일 PM3:00\n-퇴실시간: 다음 날 AM 11:00\n-코트이용시간: PM3:00-AM12:00/ 퇴실 시간전까지\n바베큐장은 실내 바베큐장으로 숯불 이용 불가 한 점 양해 부탁드립니다.\n(고기불판, 그릇, 가스 등의 기본 시설은 제공됩니다.)\n추가 인원이 있을 시 반드시 미리 공지해 주시기 바랍니다.\n즐거운 하루 보내시고 예약날에 뵙겠습니다.^ㅡ^\n            - 플테하(PLAY TENNIS HOUSE) -`,
+          );
+        } else {
+          void sendTelegramNotification(
+            '예약 완료 안내',
+            ` ${bUserName}님  ${parseInt(bMM, 10)}월  ${parseInt(bDD, 10)}일  ${r.targetLabel}${capLabel}${tLabel ? ` ${tLabel}` : ''} 예약 완료 되셨습니다.\n저희 플테하(플레이 테니스 하우스) 예약해 주셔서 감사합니다. 오늘도 즐거운 하루 보내시고 예약 날에 뵙겠습니다~🤗`,
+          );
+        }
+      }
+      const approvedMap = new Map<string, Reservation>();
+      for (const r of targets) {
+        const approved = { ...r, status: '예약완료' as ReservationStatus };
+        approvedMap.set(r.id, approved);
+        upsertReservationToSupabase(approved);
+      }
+      setReservations((prev) =>
+        prev.map((r) => (ids.includes(r.id) ? approvedMap.get(r.id)! : r)),
+      );
+
+      // Activate matching posts if all their reservations are now approved
+      setMatchingPosts((mpPrev) => {
+        let next = mpPrev;
+        for (const mp of mpPrev) {
+          if (mp.courtApproved) continue;
+          const allApproved = mp.reservationIds.every((rid) => {
+            const approved = approvedMap.get(rid);
+            if (approved) return approved.status === '예약완료';
+            return reservations.find((r) => r.id === rid)?.status === '예약완료';
+          });
+          if (!allApproved) continue;
+          const activated = { ...mp, courtApproved: true, status: '모집중' as MatchingStatus };
+          syncMatchingPost(activated);
+          next = next.map((p) => (p.id === mp.id ? activated : p));
+        }
+        return next;
+      });
+    },
+    [reservations, addNotification, getUser, pushToast, upsertReservationToSupabase, syncMatchingPost, sendTelegramNotification],
+  );
+
+  const rejectReservation = useCallback(
+    (id: string) => {
+      const target = reservations.find((r) => r.id === id);
+      if (!target) return;
+      setReservations((prev) => prev.filter((r) => r.id !== id));
+      deleteReservationFromSupabase(id);
+      addNotification({
+        kind: 'reservation_rejected',
+        title: '예약 거절',
+        body: `${getUser(target.userId)?.name}님의 ${target.targetLabel} 예약 신청이 거절되었습니다.`,
+        targetUserId: target.userId,
+      });
+      pushToast(`${getUser(target.userId)?.name}님 예약 거절 처리`, 'error');
+
+      // If this reservation belongs to a matching post, remove the matching post
+      if (target.matchingPostId) {
+        setMatchingPosts((mpPrev) => {
+          const mp = mpPrev.find((p) => p.id === target.matchingPostId);
+          if (!mp) return mpPrev;
+          if (supabaseConfigured) {
+            supabase.from('matching_posts').delete().eq('id', mp.id).then(({ error }) => {
+              if (error) pushToast('매칭 삭제 실패: ' + error.message, 'error');
+            });
+          }
+          addNotification({
+            kind: 'reservation_rejected',
+            title: '매칭글 삭제',
+            body: '대관 승인이 거절되어 매칭글이 삭제되었습니다.',
+            targetUserId: mp.userId,
+          });
+          return mpPrev.filter((p) => p.id !== mp.id);
+        });
+      }
+    },
+    [reservations, addNotification, getUser, pushToast, deleteReservationFromSupabase, supabaseConfigured],
+  );
+
+  // ===== Matching =====
+  const createMatchingPost = useCallback(
+    (input: {
+      court: CourtName;
+      date: string;
+      timeSlots: string[];
+      ntrpRequirement: NTRP | 'any';
+      genderRequirement: GenderRequirement;
+      maxPlayers: number;
+      gameType: GameType;
+      description: string;
+      depositorName?: string;
+    }) => {
+      if (input.timeSlots.length === 0) {
+        return { ok: false, reason: '시간대를 선택해주세요.' };
+      }
+      if (!input.depositorName?.trim()) {
+        return { ok: false, reason: '입금자명을 입력해주세요.' };
+      }
+      if (input.maxPlayers < 2 || input.maxPlayers > MATCHING_MAX_PLAYERS) {
+        return { ok: false, reason: `모집 인원은 2~${MATCHING_MAX_PLAYERS}명이어야 합니다.` };
+      }
+      // Check court slot availability (same as court reservation)
+      for (const slot of input.timeSlots) {
+        const slotStatus = getCourtSlotStatus(input.date, input.court, slot);
+        if (slotStatus === 'blocked') {
+          return { ok: false, reason: `${slot}은(는) 펜션 예약(15:00~익일 11:00)으로 이용이 불가합니다.` };
+        }
+        if (slotStatus === 'booked' || slotStatus === 'pending') {
+          return { ok: false, reason: `${slot}은(는) 이미 예약되었거나 신청 중인 시간대입니다.` };
+        }
+      }
+
+      // Create court reservations for the host (same flow as createCourtReservation)
+      const matchingPostId = uid('m');
+      const batchId = uid('b');
+      const newReservations: Reservation[] = input.timeSlots.map((slot) => ({
+        id: uid('r'),
+        type: 'court',
+        userId: currentUserId,
+        targetId: input.court,
+        targetLabel: input.court,
+        date: input.date,
+        timeSlot: slot,
+        status: '신청',
+        waitingSequence: null,
+        amount: getCourtSlotPriceWithConfig(courtPricing, input.date, slot, tempHolidays),
+        createdAt: Date.now(),
+        matchingPostId,
+        batchId,
+        depositorName: input.depositorName,
+      }));
+      setReservations((prev) => [...prev, ...newReservations]);
+      newReservations.forEach((r) => upsertReservationToSupabase(r));
+
+      const reservationId = newReservations[0].id;
+      const reservationIds = newReservations.map((r) => r.id);
+      const post: MatchingPost = {
+        id: matchingPostId,
+        reservationId,
+        reservationIds,
+        userId: currentUserId,
+        date: input.date,
+        time: mergeTimeSlots(input.timeSlots),
+        court: input.court,
+        ntrpRequirement: input.ntrpRequirement,
+        genderRequirement: input.genderRequirement,
+        maxPlayers: input.maxPlayers,
+        gameType: input.gameType,
+        description: input.description,
+        status: '대관대기',
+        courtApproved: false,
+        applications: [],
+        createdAt: Date.now(),
+      };
+      setMatchingPosts((prev) => [post, ...prev]);
+      syncMatchingPost(post);
+      addNotification({
+        kind: 'matching_new',
+        title: '새 매칭 모집',
+        body: `${getUser(currentUserId)?.name}님이 ${input.date} ${mergeTimeSlots(input.timeSlots)} ${input.court} 매칭을 모집합니다.`,
+        targetUserId: currentUserId,
+      });
+      pushToast('매칭글이 등록되었습니다. 코트 예약 신청도 함께 접수되었습니다.');
+      return { ok: true, post };
+    },
+    [getCourtSlotStatus, currentUserId, addNotification, getUser, pushToast, upsertReservationToSupabase, courtPricing],
+  );
+
+  const createMatchingPostFromReservation = useCallback(
+    (input: {
+      reservationIds: string[];
+      ntrpRequirement: NTRP | 'any';
+      genderRequirement: GenderRequirement;
+      maxPlayers: number;
+      gameType: GameType;
+      description: string;
+    }) => {
+      const batchReservations = reservations.filter((r) => input.reservationIds.includes(r.id));
+      if (batchReservations.length === 0) return { ok: false, reason: '예약을 찾을 수 없습니다.' };
+      if (batchReservations.some((r) => r.type !== 'court')) return { ok: false, reason: '코트 예약만 매칭 모집 가능합니다.' };
+      if (batchReservations.some((r) => r.status !== '예약완료')) return { ok: false, reason: '예약완료 건만 매칭 모집 가능합니다.' };
+      const alreadyMatched = batchReservations.some((r) => matchingPosts.some((p) => p.reservationIds.includes(r.id)));
+      if (alreadyMatched) return { ok: false, reason: '이미 해당 예약으로 매칭글이 등록되어 있습니다.' };
+      const first = batchReservations[0];
+      const timeLabel = mergeTimeSlots(batchReservations.map((r) => r.timeSlot || '').filter(Boolean));
+      const post: MatchingPost = {
+        id: crypto.randomUUID(),
+        reservationId: first.id,
+        reservationIds: input.reservationIds,
+        userId: currentUserId,
+        date: first.date,
+        time: timeLabel,
+        court: first.targetId as CourtName,
+        ntrpRequirement: input.ntrpRequirement,
+        genderRequirement: input.genderRequirement,
+        maxPlayers: input.maxPlayers,
+        gameType: input.gameType,
+        description: input.description.slice(0, 500),
+        status: '모집중',
+        courtApproved: true,
+        applications: [],
+        createdAt: Date.now(),
+      };
+      setMatchingPosts((prev) => [post, ...prev]);
+      syncMatchingPost(post);
+      setReservations((prev) =>
+        prev.map((r) => {
+          if (!input.reservationIds.includes(r.id)) return r;
+          const updated = { ...r, matchingPostId: post.id };
+          upsertReservationToSupabase(updated);
+          return updated;
+        }),
+      );
+      pushToast('매칭 모집글이 등록되었습니다.');
+      return { ok: true, post };
+    },
+    [reservations, matchingPosts, currentUserId, pushToast, syncMatchingPost],
+  );
+
+  const applyMatching = useCallback(
+    (postId: string, intro: string, gender?: ApplicantGender) => {
+      const post = matchingPosts.find((p) => p.id === postId);
+      if (!post) return { ok: false, reason: '매칭글을 찾을 수 없습니다.' };
+      if (!post.courtApproved) return { ok: false, reason: '아직 코트 대관 승인 대기 중입니다. 관리자 승인 후 신청 가능합니다.' };
+      if (post.userId === currentUserId) return { ok: false, reason: '본인 매칭글에는 신청할 수 없습니다.' };
+      if (post.applications.some((a) => a.userId === currentUserId)) {
+        return { ok: false, reason: '이미 신청한 매칭입니다.' };
+      }
+      const approvedCount = post.applications.filter((a) => a.status === '승인').length;
+      if (approvedCount >= post.maxPlayers - 1) {
+        return { ok: false, reason: '모집 인원이 마감되었습니다.' };
+      }
+      const app: MatchingApplication = {
+        id: uid('a'),
+        userId: currentUserId,
+        status: '대기',
+        appliedAt: Date.now(),
+        intro: intro.slice(0, 100),
+        gender,
+      };
+      setMatchingPosts((prev) =>
+        prev.map((p) => {
+          if (p.id !== postId) return p;
+          const updated = { ...p, applications: [...p.applications, app] };
+          syncMatchingPost(updated);
+          return updated;
+        }),
+      );
+      pushToast('매칭 신청 완료! 호스트 승인 후 연락처가 공개됩니다.');
+      return { ok: true };
+    },
+    [matchingPosts, currentUserId, pushToast],
+  );
+
+  const approveMatchingApplication = useCallback(
+    (postId: string, applicationId: string) => {
+      setMatchingPosts((prev) =>
+        prev.map((p) => {
+          if (p.id !== postId) return p;
+          const apps = p.applications.map((a) =>
+            a.id === applicationId ? { ...a, status: '승인' as const } : a,
+          );
+          const approvedCount = apps.filter((a) => a.status === '승인').length;
+          let status = p.status;
+          if (approvedCount >= p.maxPlayers - 1) status = '모집완료';
+          const app = apps.find((a) => a.id === applicationId);
+          if (app) {
+            addNotification({
+              kind: 'matching_approved',
+              title: '매칭 승인',
+              body: `${getUser(p.userId)?.name}님이 회원님의 매칭 신청을 승인했습니다. 연락처: ${getUser(p.userId)?.phone}`,
+              targetUserId: app.userId,
+            });
+          }
+          const updated = { ...p, applications: apps, status };
+          syncMatchingPost(updated);
+          return updated;
+        }),
+      );
+      pushToast('매칭 신청을 승인했습니다.');
+    },
+    [addNotification, getUser, pushToast],
+  );
+
+  const rejectMatchingApplication = useCallback(
+    (postId: string, applicationId: string, reason?: string) => {
+      setMatchingPosts((prev) =>
+        prev.map((p) => {
+          if (p.id !== postId) return p;
+          const apps = p.applications.map((a) =>
+            a.id === applicationId ? { ...a, status: '거절' as const, rejectReason: reason?.slice(0, 100) } : a,
+          );
+          const app = apps.find((a) => a.id === applicationId);
+          if (app) {
+            addNotification({
+              kind: 'matching_rejected',
+              title: '매칭 신청 거절',
+              body: reason?.trim()
+                ? `${getUser(p.userId)?.name}님이 회원님의 매칭 신청을 거절했습니다. 사유: ${reason.trim()}`
+                : `${getUser(p.userId)?.name}님이 회원님의 매칭 신청을 거절했습니다.`,
+              targetUserId: app.userId,
+            });
+          }
+          const updated = { ...p, applications: apps };
+          syncMatchingPost(updated);
+          return updated;
+        }),
+      );
+      pushToast('매칭 신청을 거절했습니다.', 'info');
+    },
+    [addNotification, getUser, pushToast],
+  );
+
+  const closeMatching = useCallback(
+    (postId: string) => {
+      setMatchingPosts((prev) =>
+        prev.map((p) => {
+          if (p.id !== postId) return p;
+          const updated = { ...p, status: '모집완료' as const };
+          syncMatchingPost(updated);
+          return updated;
+        }),
+      );
+      pushToast('매칭을 완료했습니다.', 'info');
+    },
+    [pushToast],
+  );
+
+  const deleteMatchingPost = useCallback(
+    (postId: string) => {
+      const post = matchingPosts.find((p) => p.id === postId);
+      setMatchingPosts((prev) => prev.filter((p) => p.id !== postId));
+      if (supabaseConfigured) {
+        supabase.from('matching_posts').delete().eq('id', postId).then(({ error }) => {
+          if (error) pushToast('매칭 삭제 실패: ' + error.message, 'error');
+        });
+      }
+      if (post && post.reservationIds.length > 0) {
+        setReservations((prev) => prev.filter((r) => !post.reservationIds.includes(r.id)));
+        post.reservationIds.forEach((rid) => deleteReservationFromSupabase(rid));
+      }
+      pushToast('매칭글이 삭제되었습니다.', 'info');
+    },
+    [matchingPosts, deleteReservationFromSupabase, pushToast],
+  );
+
+  // ===== Notices =====
+  const createNotice = useCallback(
+    (n: { title: string; content: string; type: NoticeType; imageUrl?: string; isMustRead?: boolean; linkUrl?: string }) => {
+      const notice: Notice = {
+        id: uid('n'),
+        title: n.title,
+        content: n.content,
+        type: n.type,
+        createdAt: Date.now(),
+        imageUrl: n.imageUrl,
+        isMustRead: n.isMustRead ?? false,
+        linkUrl: n.linkUrl,
+      };
+      setNotices((prev) => {
+        const next = [notice, ...prev];
+        if (notice.isMustRead) {
+          // Enforce limit synchronously on the new list
+          const mustReads = next
+            .filter((m) => m.isMustRead)
+            .sort((a, b) => b.createdAt - a.createdAt);
+          if (mustReads.length > 2) {
+            const unsetIds = new Set(mustReads.slice(2).map((m) => m.id));
+            if (supabaseConfigured) {
+              mustReads.slice(2).forEach((m) => {
+                supabase.from('notices').update({ is_must_read: false }).eq('id', m.id).then(({ error }) => {
+                  if (error) console.error('must_read unset failed', error);
+                });
+              });
+            }
+            return next.map((m) => (unsetIds.has(m.id) ? { ...m, isMustRead: false } : m));
+          }
+        }
+        return next;
+      });
+      if (supabaseConfigured) {
+        supabase.from('notices').insert({
+          id: notice.id,
+          title: notice.title,
+          content: notice.content,
+          type: notice.type,
+          created_at: notice.createdAt,
+          image_url: notice.imageUrl ?? null,
+          is_must_read: notice.isMustRead,
+          link_url: notice.linkUrl ?? null,
+        }).then(({ error }) => {
+          if (error) pushToast('공지 저장 실패: ' + error.message, 'error');
+        });
+      }
+      addNotification({
+        kind: 'notice_new',
+        title: '새 공지사항',
+        body: `[${n.type}] ${n.title}`,
+      });
+      pushToast('공지사항이 등록되었습니다.');
+    },
+    [addNotification, pushToast],
+  );
+
+  const updateNotice = useCallback(
+    (id: string, n: { title: string; content: string; type: NoticeType; imageUrl?: string; isMustRead?: boolean; linkUrl?: string }) => {
+      setNotices((prev) => {
+        const next = prev.map((it) =>
+          it.id === id
+            ? { ...it, title: n.title, content: n.content, type: n.type, imageUrl: n.imageUrl, isMustRead: n.isMustRead ?? false, linkUrl: n.linkUrl }
+            : it,
+        );
+        if (n.isMustRead) {
+          const mustReads = next
+            .filter((m) => m.isMustRead)
+            .sort((a, b) => b.createdAt - a.createdAt);
+          if (mustReads.length > 2) {
+            const unsetIds = new Set(mustReads.slice(2).map((m) => m.id));
+            if (supabaseConfigured) {
+              mustReads.slice(2).forEach((m) => {
+                supabase.from('notices').update({ is_must_read: false }).eq('id', m.id).then(({ error }) => {
+                  if (error) console.error('must_read unset failed', error);
+                });
+              });
+            }
+            return next.map((m) => (unsetIds.has(m.id) ? { ...m, isMustRead: false } : m));
+          }
+        }
+        return next;
+      });
+      if (supabaseConfigured) {
+        supabase
+          .from('notices')
+          .update({
+            title: n.title,
+            content: n.content,
+            type: n.type,
+            image_url: n.imageUrl ?? null,
+            is_must_read: n.isMustRead ?? false,
+            link_url: n.linkUrl ?? null,
+          })
+          .eq('id', id)
+          .then(({ error }) => {
+            if (error) pushToast('공지 수정 실패: ' + error.message, 'error');
+          });
+      }
+      pushToast('공지사항이 수정되었습니다.');
+    },
+    [pushToast],
+  );
+
+  const deleteNotice = useCallback(
+    (id: string) => {
+      setNotices((prev) => prev.filter((n) => n.id !== id));
+      if (supabaseConfigured) {
+        supabase.from('notices').delete().eq('id', id).then(({ error }) => {
+          if (error) pushToast('공지 삭제 실패: ' + error.message, 'error');
+        });
+      }
+      pushToast('공지사항이 삭제되었습니다.', 'info');
+    },
+    [pushToast],
+  );
+
+  const reorderNotices = useCallback(
+    (orderedIds: string[]) => {
+      const now = Date.now();
+      // Assign descending sort_order so the first id in the array appears first.
+      const updates = orderedIds.map((id, idx) => {
+        const sortOrder = now - idx;
+        return { id, sortOrder };
+      });
+      setNotices((prev) => {
+        const map = new Map(prev.map((n) => [n.id, n]));
+        return updates
+          .map((u) => {
+            const n = map.get(u.id);
+            return n ? { ...n, sortOrder: u.sortOrder } : null;
+          })
+          .filter((n): n is Notice => n !== null);
+      });
+      if (supabaseConfigured) {
+        updates.forEach(({ id, sortOrder }) => {
+          supabase.from('notices').update({ sort_order: sortOrder }).eq('id', id).then(({ error }) => {
+            if (error) pushToast('공지 순서 저장 실패: ' + error.message, 'error');
+          });
+        });
+      }
+    },
+    [pushToast],
+  );
+
+  const incrementNoticeViews = useCallback(
+    (noticeId: string) => {
+      setNotices((prev) => prev.map((n) => n.id === noticeId ? { ...n, views: (n.views ?? 0) + 1 } : n));
+      if (supabaseConfigured) {
+        supabase.rpc('increment_notice_views', { p_notice_id: noticeId }).then(({ error }) => {
+          if (error) console.error('[incrementNoticeViews]', error.message);
+        });
+      }
+    },
+    [],
+  );
+
+  const [noticeComments, setNoticeComments] = useState<NoticeComment[]>([]);
+
+  const loadNoticeComments = useCallback(async (noticeId: string) => {
+    if (!supabaseConfigured) return;
+    const { data } = await supabase
+      .from('notice_comments')
+      .select('*')
+      .eq('notice_id', noticeId)
+      .order('created_at', { ascending: true });
+    if (data) {
+      setNoticeComments(
+        data.map((c) => ({
+          id: c.id as string,
+          noticeId: c.notice_id as string,
+          userId: (c.user_id as string | null) ?? null,
+          userName: c.user_name as string,
+          content: c.content as string,
+          createdAt: c.created_at as number,
+          isAdmin: (c.is_admin as boolean) ?? false,
+          parentId: (c.parent_id as string | null) ?? null,
+        })),
+      );
+    }
+  }, []);
+
+  const addAdminNoticeComment = useCallback(
+    async (noticeId: string, content: string, password: string, parentId?: string | null) => {
+      if (!supabaseConfigured) return { ok: false, error: 'Supabase가 설정되지 않았습니다.' };
+      const trimmed = content.trim();
+      if (!trimmed) return { ok: false, error: '댓글 내용을 입력하세요.' };
+      const url = `${SUPABASE_URL}/functions/v1/admin-notice-reply`;
+      const anonKey = SUPABASE_ANON_KEY;
+      let res: Response;
+      try {
+        res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${anonKey}`,
+            apikey: anonKey,
+          },
+          body: JSON.stringify({ password, noticeId, content: trimmed, parentId: parentId ?? null }),
+        });
+      } catch {
+        return { ok: false, error: '네트워크 오류로 관리자 댓글 등록에 실패했습니다.' };
+      }
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, error: (json as { error?: string }).error || '관리자 댓글 등록에 실패했습니다.' };
+      const c = (json as { comment?: { id: string; noticeId: string; userId: string | null; userName: string; content: string; createdAt: number; isAdmin: boolean; parentId: string | null } }).comment;
+      if (c) {
+        setNoticeComments((prev) => [...prev, {
+          id: c.id, noticeId: c.noticeId, userId: c.userId, userName: c.userName,
+          content: c.content, createdAt: c.createdAt, isAdmin: c.isAdmin,
+          parentId: c.parentId,
+        }]);
+      }
+      return { ok: true };
+    },
+    [],
+  );
+
+  const addNoticeComment = useCallback(
+    async (noticeId: string, content: string) => {
+      if (!supabaseConfigured) return { ok: false, error: 'Supabase가 설정되지 않았습니다.' };
+      const trimmed = content.trim();
+      if (!trimmed) return { ok: false, error: '댓글 내용을 입력하세요.' };
+      const { data: sessionData } = await supabase.auth.getSession();
+      const session = sessionData.session;
+      if (!session?.user) return { ok: false, error: '회원만 댓글을 작성할 수 있습니다.' };
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('name')
+        .eq('id', session.user.id)
+        .maybeSingle();
+      const userName = (profile?.name as string) || session.user.email || '회원';
+      const id = uid('c');
+      const createdAt = Date.now();
+      const { error } = await supabase.from('notice_comments').insert({
+        id,
+        notice_id: noticeId,
+        user_id: session.user.id,
+        user_name: userName,
+        content: trimmed,
+        created_at: createdAt,
+        parent_id: null,
+      });
+      if (error) return { ok: false, error: error.message };
+      setNoticeComments((prev) => [...prev, { id, noticeId, userId: session.user.id, userName, content: trimmed, createdAt, parentId: null }]);
+      return { ok: true };
+    },
+    [],
+  );
+
+  const deleteNoticeComment = useCallback(
+    (commentId: string) => {
+      setNoticeComments((prev) => prev.filter((c) => c.id !== commentId));
+      if (supabaseConfigured) {
+        supabase.from('notice_comments').delete().eq('id', commentId).then(({ error }) => {
+          if (error) pushToast('댓글 삭제 실패: ' + error.message, 'error');
+        });
+      }
+    },
+    [pushToast],
+  );
+
+  const deleteAdminNoticeComment = useCallback(
+    async (commentId: string, password: string): Promise<{ ok: boolean; error?: string }> => {
+      const url = `${SUPABASE_URL}/functions/v1/admin-notice-reply`;
+      const anonKey = SUPABASE_ANON_KEY;
+      let res: Response;
+      try {
+        res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${anonKey}`,
+            apikey: anonKey,
+          },
+          body: JSON.stringify({ password, action: 'delete', commentId }),
+        });
+      } catch {
+        return { ok: false, error: '네트워크 오류로 삭제에 실패했습니다.' };
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok !== true) {
+        return { ok: false, error: data.error || '관리자 댓글 삭제에 실패했습니다.' };
+      }
+      setNoticeComments((prev) => prev.filter((c) => c.id !== commentId && c.parentId !== commentId));
+      return { ok: true };
+    },
+    [],
+  );
+
+  // ===== Gallery =====
+  const createGalleryItem = useCallback(
+    (input: { imageUrl?: string; summary: string; youtubeUrl?: string }) => {
+      const item: GalleryItem = {
+        id: uid('g'),
+        imageUrl: input.imageUrl || '',
+        summary: input.summary,
+        createdAt: Date.now(),
+        youtubeUrl: input.youtubeUrl || null,
+      };
+      setGalleryItems((prev) => [item, ...prev]);
+      if (supabaseConfigured) {
+        supabase.from('gallery_items').insert({
+          id: item.id,
+          image_url: item.imageUrl || null,
+          summary: item.summary,
+          created_at: item.createdAt,
+          youtube_url: item.youtubeUrl || null,
+        }).then(({ error }) => {
+          if (error) pushToast('갤러리 저장 실패: ' + error.message, 'error');
+        });
+      }
+      pushToast('갤러리가 등록되었습니다.');
+    },
+    [pushToast],
+  );
+
+  const deleteGalleryItem = useCallback(
+    (id: string) => {
+      setGalleryItems((prev) => prev.filter((g) => g.id !== id));
+      if (supabaseConfigured) {
+        supabase.from('gallery_items').delete().eq('id', id).then(({ error }) => {
+          if (error) pushToast('갤러리 삭제 실패: ' + error.message, 'error');
+        });
+      }
+      pushToast('갤러리가 삭제되었습니다.', 'info');
+    },
+    [pushToast],
+  );
+
+  const toggleGalleryFeatured = useCallback(
+    (id: string) => {
+      setGalleryItems((prev) =>
+        prev.map((g) => {
+          if (g.id !== id) return g;
+          const next = !g.isFeatured;
+          if (supabaseConfigured) {
+            supabase.from('gallery_items').update({ is_featured: next }).eq('id', id).then(({ error }) => {
+              if (error) pushToast('추천 설정 실패: ' + error.message, 'error');
+            });
+          }
+          return { ...g, isFeatured: next };
+        }),
+      );
+    },
+    [pushToast],
+  );
+
+  const toggleGalleryShowOnCourt = useCallback(
+    (id: string) => {
+      setGalleryItems((prev) =>
+        prev.map((g) => {
+          if (g.id !== id) return g;
+          const next = !g.showOnCourt;
+          if (supabaseConfigured) {
+            supabase.from('gallery_items').update({ show_on_court: next }).eq('id', id).then(({ error }) => {
+              if (error) pushToast('코트 화면 설정 실패: ' + error.message, 'error');
+            });
+          }
+          return { ...g, showOnCourt: next };
+        }),
+      );
+    },
+    [pushToast],
+  );
+
+  const toggleGalleryShowOnPension = useCallback(
+    (id: string) => {
+      setGalleryItems((prev) =>
+        prev.map((g) => {
+          if (g.id !== id) return g;
+          const next = !g.showOnPension;
+          if (supabaseConfigured) {
+            supabase.from('gallery_items').update({ show_on_pension: next }).eq('id', id).then(({ error }) => {
+              if (error) pushToast('펜션 화면 설정 실패: ' + error.message, 'error');
+            });
+          }
+          return { ...g, showOnPension: next };
+        }),
+      );
+    },
+    [pushToast],
+  );
+
+  const toggleGalleryShowOnBbq = useCallback(
+    (id: string) => {
+      setGalleryItems((prev) =>
+        prev.map((g) => {
+          if (g.id !== id) return g;
+          const next = !g.showOnBbq;
+          if (supabaseConfigured) {
+            supabase.from('gallery_items').update({ show_on_bbq: next }).eq('id', id).then(({ error }) => {
+              if (error) pushToast('바베큐 화면 설정 실패: ' + error.message, 'error');
+            });
+          }
+          return { ...g, showOnBbq: next };
+        }),
+      );
+    },
+    [pushToast],
+  );
+
+  const reorderGalleryItem = useCallback(
+    (id: string, direction: 'up' | 'down') => {
+      setGalleryItems((prev) => {
+        const sorted = [...prev].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+        const idx = sorted.findIndex((g) => g.id === id);
+        if (idx === -1) return prev;
+        const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+        if (swapIdx < 0 || swapIdx >= sorted.length) return prev;
+        const a = sorted[idx];
+        const b = sorted[swapIdx];
+        const aOrder = a.sortOrder ?? 0;
+        const bOrder = b.sortOrder ?? 0;
+        sorted[idx] = { ...a, sortOrder: bOrder };
+        sorted[swapIdx] = { ...b, sortOrder: aOrder };
+        if (supabaseConfigured) {
+          supabase.from('gallery_items').update({ sort_order: bOrder }).eq('id', a.id).then(({ error }) => {
+            if (error) pushToast('순서 변경 실패: ' + error.message, 'error');
+          });
+          supabase.from('gallery_items').update({ sort_order: aOrder }).eq('id', b.id).then(({ error }) => {
+            if (error) pushToast('순서 변경 실패: ' + error.message, 'error');
+          });
+        }
+        return sorted;
+      });
+    },
+    [pushToast],
+  );
+
+  const setGalleryOrder = useCallback(
+    (orderedIds: string[]) => {
+      setGalleryItems((prev) => {
+        const map = new Map(prev.map((g) => [g.id, g]));
+        const reordered = orderedIds.map((id, i) => {
+          const g = map.get(id);
+          if (!g) return null;
+          const sortOrder = i;
+          if (supabaseConfigured) {
+            supabase.from('gallery_items').update({ sort_order: sortOrder }).eq('id', id).then(({ error }) => {
+              if (error) pushToast('순서 변경 실패: ' + error.message, 'error');
+            });
+          }
+          return { ...g, sortOrder };
+        }).filter(Boolean) as GalleryItem[];
+        return reordered;
+      });
+    },
+    [pushToast],
+  );
+
+  const updateGalleryItem = useCallback(
+    (id: string, patch: { summary?: string; imageUrl?: string; youtubeUrl?: string | null }) => {
+      const updates: Record<string, string | null> = {};
+      if (patch.summary !== undefined) updates.summary = patch.summary;
+      if (patch.imageUrl !== undefined) updates.image_url = patch.imageUrl;
+      if (patch.youtubeUrl !== undefined) updates.youtube_url = patch.youtubeUrl;
+      setGalleryItems((prev) =>
+        prev.map((g) => {
+          if (g.id !== id) return g;
+          const next = { ...g };
+          if (patch.summary !== undefined) next.summary = patch.summary;
+          if (patch.imageUrl !== undefined) next.imageUrl = patch.imageUrl;
+          if (patch.youtubeUrl !== undefined) next.youtubeUrl = patch.youtubeUrl;
+          if (supabaseConfigured && Object.keys(updates).length > 0) {
+            supabase.from('gallery_items').update(updates).eq('id', id).then(({ error }) => {
+              if (error) pushToast('수정 실패: ' + error.message, 'error');
+            });
+          }
+          return next;
+        }),
+      );
+      pushToast('갤러리가 수정되었습니다.');
+    },
+    [pushToast],
+  );
+
+  // ===== Reviews =====
+  const createReview = useCallback(
+    async (input: { authorName: string; content: string; rating: number; imageUrls: string[] }): Promise<{ ok: boolean; error?: string }> => {
+      const trimmedName = input.authorName.trim();
+      const trimmedContent = input.content.trim();
+      if (!trimmedName) return { ok: false, error: '이름을 입력해주세요.' };
+      if (!trimmedContent) return { ok: false, error: '후기 내용을 입력해주세요.' };
+      if (input.rating < 1 || input.rating > 5) return { ok: false, error: '별점은 1~5점입니다.' };
+      if (input.imageUrls.length > 5) return { ok: false, error: '사진은 최대 5장입니다.' };
+
+      const id = uid('rv');
+      const review: Review = {
+        id,
+        authorName: trimmedName,
+        authorId: null,
+        content: trimmedContent,
+        rating: input.rating,
+        imageUrls: input.imageUrls,
+        adminReply: null,
+        adminReplyAt: null,
+        isDeleted: false,
+        createdAt: Date.now(),
+      };
+      setReviews((prev) => [review, ...prev]);
+      if (supabaseConfigured) {
+        const { error } = await supabase.from('reviews').insert({
+          id,
+          author_name: trimmedName,
+          author_id: null,
+          content: trimmedContent,
+          rating: input.rating,
+          image_urls: input.imageUrls,
+          is_deleted: false,
+          created_at: review.createdAt,
+        });
+        if (error) return { ok: false, error: error.message };
+      }
+      pushToast('이용후기가 등록되었습니다.');
+      return { ok: true };
+    },
+    [pushToast],
+  );
+
+  const deleteReview = useCallback(
+    (id: string) => {
+      setReviews((prev) => prev.filter((r) => r.id !== id));
+      if (supabaseConfigured) {
+        supabase.from('reviews').update({ is_deleted: true }).eq('id', id).then(({ error }) => {
+          if (error) {
+            pushToast('후기 삭제 실패: ' + error.message, 'error');
+          } else {
+            pushToast('후기가 삭제되었습니다.', 'info');
+          }
+        });
+      } else {
+        pushToast('후기가 삭제되었습니다.', 'info');
+      }
+    },
+    [pushToast],
+  );
+
+  const replyReview = useCallback(
+    (id: string, reply: string) => {
+      const trimmed = reply.trim();
+      if (!trimmed) return;
+      const now = Date.now();
+      setReviews((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, adminReply: trimmed, adminReplyAt: now } : r)),
+      );
+      if (supabaseConfigured) {
+        supabase.from('reviews').update({ admin_reply: trimmed, admin_reply_at: now }).eq('id', id).then(({ error }) => {
+          if (error) pushToast('답변 등록 실패: ' + error.message, 'error');
+        });
+      }
+      pushToast('답변이 등록되었습니다.');
+    },
+    [pushToast],
+  );
+
+  // ===== Notifications =====
+  const markNotificationRead = useCallback((id: string) => {
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  }, []);
+  const markAllNotificationsRead = useCallback(() => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  }, []);
+
+  // ===== Simulated waiting timeout acceleration (for demo) =====
+  // Expose a way to fast-forward timeouts in dev — not in interface but used via window
+  useEffect(() => {
+    (window as unknown as { __pthFastForward?: (id: string) => void }).__pthFastForward = (id: string) => {
+      if (timersRef.current[id]) {
+        clearTimeout(timersRef.current[id]);
+        delete timersRef.current[id];
+        setReservations((prev) => {
+          const cur = prev.find((r) => r.id === id);
+          if (!cur || cur.status !== '입금대기') return prev;
+          addNotification({
+            kind: 'waiting_timeout',
+            title: '입금 대기 시간 초과 (시뮬레이션)',
+            body: `${getUser(cur.userId)?.name}님의 입금 대기 시간이 초과되어 다음 대기자에게 이양됩니다.`,
+            targetUserId: cur.userId,
+          });
+          pushToast(`${getUser(cur.userId)?.name}님 입금 시간 초과, 다음 대기자에게 이양`, 'error');
+          setTimeout(() => promoteNextWaiting({ ...cur, status: '취소' }), 50);
+          return prev.map((r) => (r.id === id ? { ...r, status: '취소' as ReservationStatus, depositTimeoutUntil: null, updatedAt: Date.now() } : r));
+        });
+      }
+    };
+  }, [addNotification, getUser, pushToast, promoteNextWaiting]);
+
+  // ===== Telegram alert for approaching deposit deadline =====
+  const alertedDeadlineRef = useRef<Set<string>>(new Set());
+  const reservationsRef = useRef(reservations);
+  reservationsRef.current = reservations;
+  useEffect(() => {
+    const check = () => {
+      for (const r of reservationsRef.current) {
+        if (r.status !== '신청' && r.status !== '입금대기' && r.status !== '승인대기') continue;
+        const alertKey = `${r.id}:${r.type}`;
+        if (alertedDeadlineRef.current.has(alertKey)) continue;
+        const thresholdMs = r.type === 'pension' ? 48 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+        if (Date.now() - r.createdAt >= thresholdMs) {
+          alertedDeadlineRef.current.add(alertKey);
+          const label = r.type === 'pension' ? '펜션예약건' : '코트예약건';
+          const userName = r.depositorName || getUser(r.userId)?.name || '사용자';
+          sendTelegramNotification(
+            '곧 입금 시간이 종료되는 ' + label + '이 있습니다.',
+            `${userName}님의 ${r.targetLabel} ${r.date}${r.timeSlot ? ' ' + r.timeSlot : ''} ${label}이 곧 입금 시간 종료됩니다. 확인해주세요.`,
+          );
+        }
+      }
+    };
+    const id = setInterval(check, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [getUser, sendTelegramNotification]);
+
+  // cleanup timers on unmount
+  useEffect(() => {
+    const t = timersRef.current;
+    return () => {
+      Object.values(t).forEach(clearTimeout);
+    };
+  }, []);
+
+  const currentUser = users.find((u) => u.id === currentUserId) || users[0];
+  void authUser;
+
+  const value: AppState = {
+    currentUserId,
+    users,
+    rooms,
+    updateRoom,
+    reservations,
+    matchingPosts,
+    gameDayEvents,
+    notices,
+    galleryItems,
+    notifications,
+    currentUser,
+    getUser,
+    updateCurrentUser,
+    createPensionReservation,
+    createCourtReservation,
+    createAdminCourtReservation,
+    requestWaiting,
+    cancelReservation,
+    approveReservation,
+    approveReservations,
+    rejectReservation,
+    createMatchingPost,
+    createMatchingPostFromReservation,
+    applyMatching,
+    approveMatchingApplication,
+    rejectMatchingApplication,
+    closeMatching,
+    deleteMatchingPost,
+    createNotice,
+    updateNotice,
+    deleteNotice,
+    reorderNotices,
+    noticeComments,
+    loadNoticeComments,
+    addNoticeComment,
+    addAdminNoticeComment,
+    deleteAdminNoticeComment,
+    deleteNoticeComment,
+    incrementNoticeViews,
+    createGalleryItem,
+    deleteGalleryItem,
+    toggleGalleryFeatured,
+    toggleGalleryShowOnCourt,
+    toggleGalleryShowOnPension,
+    toggleGalleryShowOnBbq,
+    reorderGalleryItem,
+    setGalleryOrder,
+    updateGalleryItem,
+    reviews,
+    createReview,
+    deleteReview,
+    replyReview,
+    markNotificationRead,
+    markAllNotificationsRead,
+    toasts,
+    pushToast,
+    dismissToast,
+    pensionWeekdayPrice,
+    pensionWeekendPrice,
+    pensionPriceOverrides,
+    getPensionPrice,
+    updatePensionPrice,
+    setPensionPriceForDate,
+    removePensionPriceOverride,
+    pensionWeekdayBaseCapacity,
+    pensionWeekendBaseCapacity,
+    getBaseCapacityForDate,
+    updatePensionBaseCapacity,
+    courtPricing,
+    updateCourtPricing,
+    bbqPricing,
+    updateBBQPricing,
+    createBBQReservation,
+    bannerImageUrl,
+    updateBannerImage,
+    bannerGradientColors,
+    updateBannerGradientColors,
+    logoImageUrl,
+    updateLogoImage,
+    bankAccount,
+    updateBankAccount,
+    courtOpenDays,
+    pensionOpenMonths,
+    bbqOpenDays,
+    updateReservationLimits,
+    telegramConfig,
+    updateTelegramConfig,
+    sendTelegramTest,
+    tempHolidays,
+    toggleHoliday,
+    isHoliday,
+    dateMemos,
+    getDateMemo,
+    saveDateMemo,
+    isPensionBlockedByCourt,
+    isCourtBlockedByPension,
+    isCourtSlotBlockedByPension,
+    isCourtSlotBlockedByGameDay,
+    isPensionBlockedByGameDay,
+    getGameDayBlockedHours,
+    getPensionStatusForDate,
+    getCourtSlotStatus,
+    getReservationsByDate,
+    getMatchingsByDate,
+    focusMatchingPostId,
+    setFocusMatchingPostId,
+  };
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+export type { ReservationType };

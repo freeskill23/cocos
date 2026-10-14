@@ -1,0 +1,1210 @@
+import { useState, useEffect, useCallback } from 'react';
+import {
+  BarChart3,
+  Users,
+  Eye,
+  Search,
+  Link2,
+  TrendingUp,
+  RefreshCw,
+  Calendar,
+  UserPlus,
+  Globe,
+  Smartphone,
+  Monitor,
+  Clock,
+  Megaphone,
+  Target,
+  KeyRound,
+  ChevronRight,
+  ArrowLeft,
+} from 'lucide-react';
+import { supabase, supabaseConfigured } from '../../lib/supabase';
+import { SectionTitle, EmptyState } from '../../components/ui';
+import { Modal } from '../../components/Modal';
+
+interface RawLog {
+  id: number;
+  session_id: string;
+  page: string;
+  path: string | null;
+  referrer: string | null;
+  search_keyword: string | null;
+  user_agent: string | null;
+  is_member: boolean;
+  user_name: string | null;
+  created_at: string;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  utm_term: string | null;
+  utm_content: string | null;
+  ad_platform: string | null;
+  landing_url: string | null;
+}
+
+interface ProfileRow {
+  id: string;
+  email: string;
+  name: string;
+  nickname: string | null;
+  phone: string | null;
+  login_count: number | null;
+  created_at: string;
+}
+
+interface Stats {
+  totalVisits: number;
+  todayVisits: number;
+  todayUniqueVisitors: number;
+  yesterdayVisits: number;
+  yesterdayUniqueVisitors: number;
+  weekVisits: number;
+  weekUniqueVisitors: number;
+  monthVisits: number;
+  memberVisits: number;
+  guestVisits: number;
+  todaySignups: number;
+  totalMembers: number;
+}
+
+interface DailyCount {
+  date: string;
+  visits: number;
+  uniqueVisitors: number;
+}
+
+interface PageCount {
+  page: string;
+  visits: number;
+}
+
+interface ReferrerCount {
+  referrer: string;
+  visits: number;
+}
+
+interface KeywordCount {
+  keyword: string;
+  visits: number;
+}
+
+interface DeviceCount {
+  device: string;
+  visits: number;
+}
+
+interface CampaignCount {
+  campaign: string;
+  visits: number;
+}
+
+interface AdPlatformCount {
+  platform: string;
+  visits: number;
+}
+
+function formatAdPlatform(platform: string | null): string {
+  if (!platform) return '자연 유입';
+  const map: Record<string, string> = {
+    naver_powerlink: '네이버 파워링크',
+    naver: '네이버',
+    google_ads: '구글 광고',
+    google: '구글',
+    kakao: '카카오',
+    meta_ads: '메타 광고',
+  };
+  return map[platform] || platform;
+}
+
+function isToday(dateStr: string): boolean {
+  const d = new Date(dateStr);
+  const now = new Date();
+  return d.toDateString() === now.toDateString();
+}
+
+function isYesterday(dateStr: string): boolean {
+  const d = new Date(dateStr);
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  return d.toDateString() === yesterday.toDateString();
+}
+
+function isWithinDays(dateStr: string, days: number): boolean {
+  const d = new Date(dateStr);
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  return d >= cutoff;
+}
+
+function isThisMonth(dateStr: string): boolean {
+  const d = new Date(dateStr);
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+}
+
+function detectDevice(ua: string | null): string {
+  if (!ua) return '기타';
+  if (/Mobile|Android|iPhone|iPad/i.test(ua)) return '모바일';
+  return 'PC';
+}
+
+function formatReferrer(referrer: string | null): string {
+  if (!referrer) return '직접 방문';
+  try {
+    const url = new URL(referrer);
+    const host = url.hostname.replace(/^www\./, '');
+    if (host.includes('google')) return 'Google 검색';
+    if (host.includes('naver')) return 'Naver 검색';
+    if (host.includes('daum') || host.includes('kakao')) return 'Daum/Kakao';
+    if (host.includes('bing')) return 'Bing 검색';
+    if (host.includes('instagram')) return 'Instagram';
+    if (host.includes('facebook')) return 'Facebook';
+    if (host.includes('twitter') || host.includes('x.com')) return 'X(Twitter)';
+    if (host.includes('youtube')) return 'YouTube';
+    if (host.includes('blog')) return '블로그';
+    if (host.includes('playtennis') || host.includes('localhost')) return '직접 방문';
+    return host;
+  } catch {
+    return '직접 방문';
+  }
+}
+
+function StatCard({
+  icon,
+  label,
+  value,
+  sub,
+  accent = 'navy',
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+  sub?: string;
+  accent?: 'navy' | 'green' | 'amber' | 'sky';
+  onClick?: () => void;
+}) {
+  const colorMap = {
+    navy: 'bg-navy-50 text-navy-700 border-navy-100',
+    green: 'bg-green-50 text-green-700 border-green-100',
+    amber: 'bg-amber-50 text-amber-700 border-amber-100',
+    sky: 'bg-sky-50 text-sky-700 border-sky-100',
+  };
+  const inner = (
+    <>
+      <div className={`w-11 h-11 rounded-xl flex items-center justify-center border ${colorMap[accent]}`}>
+        {icon}
+      </div>
+      <div>
+        <p className="text-xs text-slate-500 font-semibold">{label}</p>
+        <p className="text-xl font-extrabold text-navy-900">{value}</p>
+        {sub && <p className="text-[11px] text-slate-400">{sub}</p>}
+      </div>
+    </>
+  );
+  if (onClick) {
+    return (
+      <button
+        onClick={onClick}
+        className="card p-4 flex items-center gap-3 text-left hover:ring-2 hover:ring-green-200 transition cursor-pointer"
+      >
+        {inner}
+      </button>
+    );
+  }
+  return <div className="card p-4 flex items-center gap-3">{inner}</div>;
+}
+
+function BarRow({ label, value, max }: { label: string; value: number; max: number }) {
+  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
+  return (
+    <div className="flex items-center gap-3 py-1.5">
+      <span className="text-sm text-navy-800 w-28 shrink-0 truncate font-semibold">{label}</span>
+      <div className="flex-1 h-6 bg-slate-100 rounded-lg overflow-hidden">
+        <div
+          className="h-full bg-navy-700 rounded-lg transition-all duration-500"
+          style={{ width: `${Math.max(pct, 2)}%` }}
+        />
+      </div>
+      <span className="text-sm font-bold text-navy-900 w-10 text-right">{value}</span>
+    </div>
+  );
+}
+
+export function AdminAnalyticsScreen() {
+  const [loading, setLoading] = useState(true);
+  const [logs, setLogs] = useState<RawLog[]>([]);
+  const [todaySignups, setTodaySignups] = useState(0);
+  const [totalMembers, setTotalMembers] = useState(0);
+  const [dbCounts, setDbCounts] = useState({
+    total: 0,
+    today: 0,
+    todayUnique: 0,
+    yesterday: 0,
+    yesterdayUnique: 0,
+    week: 0,
+    month: 0,
+    member: 0,
+    guest: 0,
+  });
+  const [range, setRange] = useState<'today' | 'yesterday' | 'week' | 'month' | 'all'>('week');
+  const [detailModal, setDetailModal] = useState<'memberVisits' | 'todaySignups' | 'todayVisitors' | null>(null);
+  const [memberVisitLogs, setMemberVisitLogs] = useState<RawLog[]>([]);
+  const [memberResCounts, setMemberResCounts] = useState<Map<string, { pension: number; court: number }>>(new Map());
+  const [todaySignupList, setTodaySignupList] = useState<ProfileRow[]>([]);
+  const [todayVisitorLogs, setTodayVisitorLogs] = useState<RawLog[]>([]);
+  const [visitorWeekCounts, setVisitorWeekCounts] = useState<Map<string, number>>(new Map());
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [selectedVisitorKey, setSelectedVisitorKey] = useState<string | null>(null);
+  const [dailyLogs, setDailyLogs] = useState<RawLog[]>([]);
+
+  const fetchLogs = useCallback(async () => {
+    if (!supabaseConfigured) return;
+    setLoading(true);
+    try {
+      let cutoff = new Date();
+      let endCutoff: Date | null = null;
+      if (range === 'today') cutoff.setHours(0, 0, 0, 0);
+      else if (range === 'yesterday') {
+        cutoff.setDate(cutoff.getDate() - 1);
+        cutoff.setHours(0, 0, 0, 0);
+        endCutoff = new Date();
+        endCutoff.setHours(0, 0, 0, 0);
+      } else if (range === 'week') cutoff.setDate(cutoff.getDate() - 7);
+      else if (range === 'month') cutoff.setMonth(cutoff.getMonth() - 1);
+      else cutoff.setFullYear(2020);
+
+      let query = supabase
+        .from('visitor_logs')
+        .select('*')
+        .gte('created_at', cutoff.toISOString());
+      if (endCutoff) {
+        query = query.lt('created_at', endCutoff.toISOString());
+      }
+      const { data, error } = await query
+        .order('created_at', { ascending: false })
+        .limit(5000);
+
+      if (error) {
+        console.error('[analytics]', error.message);
+      }
+      const logsData = (data as RawLog[]) || [];
+      if (data) {
+        setLogs(logsData);
+      }
+
+      // Fetch exact counts from DB (not capped by the 5000-row limit)
+      const startToday = new Date(); startToday.setHours(0, 0, 0, 0);
+      const startYesterday = new Date(); startYesterday.setDate(startYesterday.getDate() - 1); startYesterday.setHours(0, 0, 0, 0);
+      const endYesterday = new Date(); endYesterday.setHours(0, 0, 0, 0);
+      const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
+      const monthAgo = new Date(); monthAgo.setMonth(monthAgo.getMonth() - 1);
+
+      const countResults = await Promise.allSettled([
+        supabase.from('visitor_logs').select('*', { count: 'exact', head: true }),
+        supabase.from('visitor_logs').select('*', { count: 'exact', head: true }).gte('created_at', startToday.toISOString()),
+        supabase.from('visitor_logs').select('*', { count: 'exact', head: true }).gte('created_at', startYesterday.toISOString()).lt('created_at', endYesterday.toISOString()),
+        supabase.from('visitor_logs').select('*', { count: 'exact', head: true }).gte('created_at', weekAgo.toISOString()),
+        supabase.from('visitor_logs').select('*', { count: 'exact', head: true }).gte('created_at', monthAgo.toISOString()),
+        supabase.from('visitor_logs').select('*', { count: 'exact', head: true }).eq('is_member', true),
+        supabase.from('visitor_logs').select('*', { count: 'exact', head: true }).eq('is_member', false),
+      ]);
+      const getCount = (r: PromiseSettledResult<{ count: number | null }>) =>
+        r.status === 'fulfilled' ? (r.value.count ?? 0) : 0;
+
+      const todayUnique = new Set(logsData.filter((l) => isToday(l.created_at)).map((l) => l.session_id)).size;
+      const yesterdayUnique = new Set(logsData.filter((l) => isYesterday(l.created_at)).map((l) => l.session_id)).size;
+
+      setDbCounts({
+        total: getCount(countResults[0]),
+        today: getCount(countResults[1]),
+        todayUnique,
+        yesterday: getCount(countResults[2]),
+        yesterdayUnique,
+        week: getCount(countResults[3]),
+        month: getCount(countResults[4]),
+        member: getCount(countResults[5]),
+        guest: getCount(countResults[6]),
+      });
+
+      // Fetch last 7 days of logs for the daily trend chart (independent of range)
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const { data: dailyData } = await supabase
+        .from('visitor_logs')
+        .select('created_at, session_id')
+        .gte('created_at', sevenDaysAgo.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(50000);
+      setDailyLogs((dailyData as Pick<RawLog, 'created_at' | 'session_id'>[]) || []);
+
+      // Fetch today's signups and total members from profiles
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const { count: todayCount } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', startOfToday.toISOString());
+      if (todayCount !== null) setTodaySignups(todayCount);
+
+      const { count: totalCount } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true });
+      if (totalCount !== null) setTotalMembers(totalCount);
+    } catch (err) {
+      console.error('[analytics] fetchLogs error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [range]);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
+
+  const openMemberVisits = useCallback(async () => {
+    setDetailModal('memberVisits');
+    setDetailLoading(true);
+    const { data } = await supabase
+      .from('visitor_logs')
+      .select('*')
+      .eq('is_member', true)
+      .order('created_at', { ascending: false })
+      .limit(1000);
+    setMemberVisitLogs((data as RawLog[]) || []);
+
+    // Fetch all reservations and count pension/court per member by depositor_name
+    const { data: resData } = await supabase
+      .from('reservations')
+      .select('type, depositor_name, user_id, status')
+      .neq('status', '취소');
+    const counts = new Map<string, { pension: number; court: number }>();
+    const profilesMap = new Map<string, string>();
+    const { data: profilesData } = await supabase
+      .from('profiles')
+      .select('id, name, nickname');
+    for (const p of (profilesData as { id: string; name: string; nickname: string | null }[]) || []) {
+      profilesMap.set(p.id, p.nickname || p.name);
+    }
+    for (const r of (resData as { type: string; depositor_name: string | null; user_id: string; status: string }[]) || []) {
+      const name = r.depositor_name || profilesMap.get(r.user_id) || '';
+      if (!name) continue;
+      if (!counts.has(name)) counts.set(name, { pension: 0, court: 0 });
+      const entry = counts.get(name)!;
+      if (r.type === 'pension') entry.pension++;
+      else if (r.type === 'court') entry.court++;
+    }
+    setMemberResCounts(counts);
+
+    setDetailLoading(false);
+  }, []);
+
+  const openTodayVisitors = useCallback(async () => {
+    setDetailModal('todayVisitors');
+    setDetailLoading(true);
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const { data } = await supabase
+      .from('visitor_logs')
+      .select('*')
+      .gte('created_at', startOfToday.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1000);
+    setTodayVisitorLogs((data as RawLog[]) || []);
+
+    // Fetch last 7 days of logs to compute per-visitor visit counts
+    // Order by created_at desc so newest sessions are prioritized if limit is hit
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    const { data: weekData, error: weekErr } = await supabase
+      .from('visitor_logs')
+      .select('session_id, is_member, user_name')
+      .gte('created_at', weekAgo.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(50000);
+    if (weekErr) console.error('[weekCounts]', weekErr.message);
+    const counts = new Map<string, number>();
+    for (const wl of (weekData as Pick<RawLog, 'session_id' | 'is_member' | 'user_name'>[]) || []) {
+      const key = wl.is_member && wl.user_name ? `member:${wl.user_name}` : `session:${wl.session_id}`;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    // Safety net: every visitor in today's list must have at least 1
+    for (const log of (data as RawLog[]) || []) {
+      const key = log.is_member && log.user_name ? `member:${log.user_name}` : `session:${log.session_id}`;
+      if (!counts.has(key)) counts.set(key, 1);
+    }
+    setVisitorWeekCounts(counts);
+    setDetailLoading(false);
+  }, []);
+
+  const openTodaySignups = useCallback(async () => {
+    setDetailModal('todaySignups');
+    setDetailLoading(true);
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, email, name, nickname, phone, login_count, created_at')
+      .gte('created_at', startOfToday.toISOString())
+      .order('created_at', { ascending: false });
+    setTodaySignupList((data as ProfileRow[]) || []);
+    setDetailLoading(false);
+  }, []);
+
+  // Compute stats
+  const stats: Stats = {
+    totalVisits: dbCounts.total,
+    todayVisits: dbCounts.today,
+    todayUniqueVisitors: dbCounts.todayUnique,
+    yesterdayVisits: dbCounts.yesterday,
+    yesterdayUniqueVisitors: dbCounts.yesterdayUnique,
+    weekVisits: dbCounts.week,
+    weekUniqueVisitors: new Set(
+      logs.filter((l) => isWithinDays(l.created_at, 7)).map((l) => l.session_id),
+    ).size,
+    monthVisits: dbCounts.month,
+    memberVisits: dbCounts.member,
+    guestVisits: dbCounts.guest,
+    todaySignups,
+    totalMembers,
+  };
+
+  // Daily trend (last 7 days) — uses dedicated dailyLogs fetched independent of range
+  const dailyMap = new Map<string, { visits: number; sessions: Set<string> }>();
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    dailyMap.set(d.toDateString(), { visits: 0, sessions: new Set() });
+  }
+  for (const log of dailyLogs) {
+    const key = new Date(log.created_at).toDateString();
+    if (dailyMap.has(key)) {
+      const entry = dailyMap.get(key)!;
+      entry.visits++;
+      entry.sessions.add(log.session_id);
+    }
+  }
+  const dailyTrend: DailyCount[] = Array.from(dailyMap.entries()).map(([date, v]) => ({
+    date,
+    visits: v.visits,
+    uniqueVisitors: v.sessions.size,
+  }));
+  const maxDaily = Math.max(...dailyTrend.map((d) => d.visits), 1);
+
+  // Page breakdown
+  const pageMap = new Map<string, number>();
+  for (const log of logs) {
+    pageMap.set(log.page, (pageMap.get(log.page) || 0) + 1);
+  }
+  const pageCounts: PageCount[] = Array.from(pageMap.entries())
+    .map(([page, visits]) => ({ page, visits }))
+    .sort((a, b) => b.visits - a.visits)
+    .slice(0, 10);
+  const maxPage = Math.max(...pageCounts.map((p) => p.visits), 1);
+
+  // Referrer breakdown
+  const refMap = new Map<string, number>();
+  for (const log of logs) {
+    const ref = formatReferrer(log.referrer);
+    refMap.set(ref, (refMap.get(ref) || 0) + 1);
+  }
+  const refCounts: ReferrerCount[] = Array.from(refMap.entries())
+    .map(([referrer, visits]) => ({ referrer, visits }))
+    .sort((a, b) => b.visits - a.visits)
+    .slice(0, 10);
+  const maxRef = Math.max(...refCounts.map((r) => r.visits), 1);
+
+  // Search keywords
+  const kwMap = new Map<string, number>();
+  for (const log of logs) {
+    if (log.search_keyword) {
+      kwMap.set(log.search_keyword, (kwMap.get(log.search_keyword) || 0) + 1);
+    }
+  }
+  const kwCounts: KeywordCount[] = Array.from(kwMap.entries())
+    .map(([keyword, visits]) => ({ keyword, visits }))
+    .sort((a, b) => b.visits - a.visits)
+    .slice(0, 15);
+  const maxKw = Math.max(...kwCounts.map((k) => k.visits), 1);
+
+  // Device breakdown
+  const devMap = new Map<string, number>();
+  for (const log of logs) {
+    const dev = detectDevice(log.user_agent);
+    devMap.set(dev, (devMap.get(dev) || 0) + 1);
+  }
+  const devCounts: DeviceCount[] = Array.from(devMap.entries())
+    .map(([device, visits]) => ({ device, visits }))
+    .sort((a, b) => b.visits - a.visits);
+  const maxDev = Math.max(...devCounts.map((d) => d.visits), 1);
+
+  // Ad platform breakdown
+  const adMap = new Map<string, number>();
+  for (const log of logs) {
+    const plat = formatAdPlatform(log.ad_platform);
+    adMap.set(plat, (adMap.get(plat) || 0) + 1);
+  }
+  const adCounts: AdPlatformCount[] = Array.from(adMap.entries())
+    .map(([platform, visits]) => ({ platform, visits }))
+    .sort((a, b) => b.visits - a.visits);
+  const maxAd = Math.max(...adCounts.map((a) => a.visits), 1);
+
+  // Campaign breakdown
+  const campMap = new Map<string, number>();
+  for (const log of logs) {
+    if (log.utm_campaign || log.utm_source) {
+      const camp = log.utm_campaign || log.utm_source || '';
+      campMap.set(camp, (campMap.get(camp) || 0) + 1);
+    }
+  }
+  const campCounts: CampaignCount[] = Array.from(campMap.entries())
+    .map(([campaign, visits]) => ({ campaign, visits }))
+    .sort((a, b) => b.visits - a.visits)
+    .slice(0, 15);
+  const maxCamp = Math.max(...campCounts.map((c) => c.visits), 1);
+
+  // Ad keyword breakdown (utm_term)
+  const adKwMap = new Map<string, number>();
+  for (const log of logs) {
+    if (log.utm_term) {
+      adKwMap.set(log.utm_term, (adKwMap.get(log.utm_term) || 0) + 1);
+    }
+  }
+  const adKwCounts: KeywordCount[] = Array.from(adKwMap.entries())
+    .map(([keyword, visits]) => ({ keyword, visits }))
+    .sort((a, b) => b.visits - a.visits)
+    .slice(0, 15);
+  const maxAdKw = Math.max(...adKwCounts.map((k) => k.visits), 1);
+
+  const adVisits = logs.filter((l) => l.ad_platform).length;
+  const organicVisits = stats.totalVisits - adVisits;
+
+  const rangeLabels: Record<typeof range, string> = {
+    today: '오늘',
+    yesterday: '어제',
+    week: '최근 7일',
+    month: '이번 달',
+    all: '전체',
+  };
+
+  const todayLabel = new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' });
+
+  const PAGE_LABELS: Record<string, string> = {
+    home: '홈', pension: '펜션', court: '코트대관', matching: '매칭', event: '게임데이',
+    notices: '공지사항', gallery: '갤러리', reviews: '후기', mypage: '마이페이지',
+  };
+
+  return (
+    <div className="space-y-5 pb-4">
+      <SectionTitle
+        title="방문자 분석"
+        subtitle={todayLabel}
+        right={
+          <div className="flex items-center gap-2">
+            <select
+              value={range}
+              onChange={(e) => setRange(e.target.value as typeof range)}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-navy-800 bg-white outline-none focus:border-volt-400"
+            >
+              <option value="today">오늘</option>
+              <option value="yesterday">어제</option>
+              <option value="week">최근 7일</option>
+              <option value="month">이번 달</option>
+              <option value="all">전체</option>
+            </select>
+            <button
+              onClick={fetchLogs}
+              disabled={loading}
+              className="rounded-lg p-2 bg-white border border-slate-200 text-navy-700 hover:bg-slate-50 transition"
+              aria-label="새로고침"
+            >
+              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
+        }
+      />
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard
+          icon={<Eye size={20} />}
+          label="총 방문수"
+          value={stats.totalVisits}
+          sub={rangeLabels[range]}
+          accent="navy"
+        />
+        <StatCard
+          icon={<Users size={20} />}
+          label="오늘 방문자"
+          value={stats.todayUniqueVisitors}
+          sub={`방문 ${stats.todayVisits}회`}
+          accent="green"
+          onClick={openTodayVisitors}
+        />
+        <StatCard
+          icon={<TrendingUp size={20} />}
+          label="어제 방문자"
+          value={stats.yesterdayUniqueVisitors}
+          sub={`방문 ${stats.yesterdayVisits}회`}
+          accent="sky"
+        />
+        <StatCard
+          icon={<Calendar size={20} />}
+          label="이번 달 방문"
+          value={stats.monthVisits}
+          accent="amber"
+        />
+      </div>
+
+      {/* Member vs Guest & Signups */}
+      <div className="grid grid-cols-3 gap-3">
+        <button
+          onClick={openMemberVisits}
+          className="card p-4 flex items-center gap-3 text-left hover:ring-2 hover:ring-green-200 transition cursor-pointer"
+        >
+          <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center text-green-700">
+            <Users size={18} />
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 font-semibold">회원 방문</p>
+            <p className="text-lg font-extrabold text-navy-900">{stats.memberVisits}</p>
+          </div>
+        </button>
+        <div className="card p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600">
+            <Globe size={18} />
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 font-semibold">비회원 방문</p>
+            <p className="text-lg font-extrabold text-navy-900">{stats.guestVisits}</p>
+          </div>
+        </div>
+        <button
+          onClick={openTodaySignups}
+          className="card p-4 flex items-center gap-3 text-left hover:ring-2 hover:ring-volt-200 transition cursor-pointer"
+        >
+          <div className="w-10 h-10 rounded-xl bg-volt-100 flex items-center justify-center text-volt-700">
+            <UserPlus size={18} />
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 font-semibold">오늘 가입</p>
+            <p className="text-lg font-extrabold text-navy-900">
+              {stats.todaySignups}
+              <span className="text-xs font-semibold text-slate-400 ml-1">/ 총 {stats.totalMembers}명</span>
+            </p>
+          </div>
+        </button>
+      </div>
+
+      {/* Ad vs Organic & Campaign Summary */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard
+          icon={<Megaphone size={20} />}
+          label="광고 유입"
+          value={adVisits}
+          sub={stats.totalVisits > 0 ? `${Math.round((adVisits / stats.totalVisits) * 100)}%` : '0%'}
+          accent="amber"
+        />
+        <StatCard
+          icon={<Globe size={20} />}
+          label="자연 유입"
+          value={organicVisits}
+          sub={stats.totalVisits > 0 ? `${Math.round((organicVisits / stats.totalVisits) * 100)}%` : '0%'}
+          accent="green"
+        />
+        <StatCard
+          icon={<Target size={20} />}
+          label="캠페인 수"
+          value={campCounts.length}
+          sub="활성 캠페인"
+          accent="navy"
+        />
+        <StatCard
+          icon={<KeyRound size={20} />}
+          label="광고 키워드 수"
+          value={adKwCounts.length}
+          sub="추적된 키워드"
+          accent="sky"
+        />
+      </div>
+
+      {/* Daily Trend */}
+      <div className="card p-5">
+        <h3 className="font-bold text-navy-900 mb-3 flex items-center gap-2">
+          <BarChart3 size={18} className="text-navy-600" />
+          일별 방문 추이 (최근 7일)
+        </h3>
+        <div className="space-y-1.5">
+          {dailyTrend.map((d) => {
+            const label = new Date(d.date).toLocaleDateString('ko-KR', {
+              month: 'numeric',
+              day: 'numeric',
+              weekday: 'short',
+            });
+            return (
+              <div key={d.date}>
+                <div className="flex items-center gap-3 py-1">
+                  <span className="text-xs text-slate-500 w-20 shrink-0 font-semibold">{label}</span>
+                  <div className="flex-1 h-7 bg-slate-100 rounded-lg overflow-hidden flex items-center px-2">
+                    <div
+                      className="h-full bg-gradient-to-r from-green-600 to-emerald-500 rounded-lg transition-all duration-500 flex items-center justify-end pr-2"
+                      style={{ width: `${Math.max((d.visits / maxDaily) * 100, d.visits > 0 ? 8 : 0)}%` }}
+                    >
+                      {d.visits > 0 && (
+                        <span className="text-[10px] font-bold text-white whitespace-nowrap">
+                          {d.visits}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-xs text-slate-400 w-16 text-right">
+                    {d.uniqueVisitors}명
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Page Breakdown */}
+        <div className="card p-5">
+          <h3 className="font-bold text-navy-900 mb-3 flex items-center gap-2">
+            <BarChart3 size={18} className="text-navy-600" />
+            페이지별 방문
+          </h3>
+          {pageCounts.length === 0 ? (
+            <p className="text-sm text-slate-400 py-4 text-center">데이터가 없습니다.</p>
+          ) : (
+            <div className="space-y-0.5">
+              {pageCounts.map((p) => (
+                <BarRow key={p.page} label={PAGE_LABELS[p.page] || p.page} value={p.visits} max={maxPage} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Referrer Breakdown */}
+        <div className="card p-5">
+          <h3 className="font-bold text-navy-900 mb-3 flex items-center gap-2">
+            <Link2 size={18} className="text-navy-600" />
+            유입 경로
+          </h3>
+          {refCounts.length === 0 ? (
+            <p className="text-sm text-slate-400 py-4 text-center">데이터가 없습니다.</p>
+          ) : (
+            <div className="space-y-0.5">
+              {refCounts.map((r) => (
+                <BarRow key={r.referrer} label={r.referrer} value={r.visits} max={maxRef} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Search Keywords (organic + ad) */}
+        <div className="card p-5">
+          <h3 className="font-bold text-navy-900 mb-3 flex items-center gap-2">
+            <Search size={18} className="text-navy-600" />
+            검색 키워드
+          </h3>
+          {kwCounts.length === 0 ? (
+            <p className="text-sm text-slate-400 py-4 text-center">검색을 통한 방문이 아직 없습니다.</p>
+          ) : (
+            <div className="space-y-0.5">
+              {kwCounts.map((k) => (
+                <BarRow key={k.keyword} label={k.keyword} value={k.visits} max={maxKw} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Ad Keywords (utm_term) */}
+        <div className="card p-5">
+          <h3 className="font-bold text-navy-900 mb-3 flex items-center gap-2">
+            <KeyRound size={18} className="text-volt-600" />
+            광고 키워드
+          </h3>
+          {adKwCounts.length === 0 ? (
+            <p className="text-sm text-slate-400 py-4 text-center">광고를 통한 키워드 유입이 아직 없습니다.</p>
+          ) : (
+            <div className="space-y-0.5">
+              {adKwCounts.map((k) => (
+                <BarRow key={k.keyword} label={k.keyword} value={k.visits} max={maxAdKw} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Device Breakdown */}
+        <div className="card p-5">
+          <h3 className="font-bold text-navy-900 mb-3 flex items-center gap-2">
+            <Monitor size={18} className="text-navy-600" />
+            접속 기기
+          </h3>
+          {devCounts.length === 0 ? (
+            <p className="text-sm text-slate-400 py-4 text-center">데이터가 없습니다.</p>
+          ) : (
+            <div className="space-y-0.5">
+              {devCounts.map((d) => (
+                <div key={d.device} className="flex items-center gap-3 py-2">
+                  <div className="flex items-center gap-2 w-28 shrink-0">
+                    {d.device === '모바일' ? (
+                      <Smartphone size={16} className="text-slate-400" />
+                    ) : (
+                      <Monitor size={16} className="text-slate-400" />
+                    )}
+                    <span className="text-sm text-navy-800 font-semibold">{d.device}</span>
+                  </div>
+                  <div className="flex-1 h-6 bg-slate-100 rounded-lg overflow-hidden">
+                    <div
+                      className="h-full bg-sky-500 rounded-lg transition-all duration-500"
+                      style={{ width: `${Math.max((d.visits / maxDev) * 100, 5)}%` }}
+                    />
+                  </div>
+                  <span className="text-sm font-bold text-navy-900 w-10 text-right">{d.visits}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Ad Platform & Campaign Breakdown */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Ad Platform Breakdown */}
+        <div className="card p-5">
+          <h3 className="font-bold text-navy-900 mb-3 flex items-center gap-2">
+            <Megaphone size={18} className="text-volt-600" />
+            광고 플랫폼별 유입
+          </h3>
+          {adCounts.length === 0 ? (
+            <p className="text-sm text-slate-400 py-4 text-center">광고 유입 데이터가 아직 없습니다.</p>
+          ) : (
+            <div className="space-y-0.5">
+              {adCounts.map((a) => (
+                <BarRow key={a.platform} label={a.platform} value={a.visits} max={maxAd} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Campaign Breakdown */}
+        <div className="card p-5">
+          <h3 className="font-bold text-navy-900 mb-3 flex items-center gap-2">
+            <Target size={18} className="text-navy-600" />
+            캠페인별 유입
+          </h3>
+          {campCounts.length === 0 ? (
+            <p className="text-sm text-slate-400 py-4 text-center">캠페인 유입 데이터가 아직 없습니다.</p>
+          ) : (
+            <div className="space-y-0.5">
+              {campCounts.map((c) => (
+                <BarRow key={c.campaign} label={c.campaign} value={c.visits} max={maxCamp} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {logs.length === 0 && !loading && (
+        <EmptyState
+          icon={<BarChart3 size={28} />}
+          title="아직 방문 데이터가 없어요"
+          description="방문자가 접속하면 여기에 분석 데이터가 표시됩니다."
+        />
+      )}
+
+      {/* Today visitors detail modal */}
+      <Modal
+        open={detailModal === 'todayVisitors'}
+        onClose={() => { setDetailModal(null); setSelectedVisitorKey(null); }}
+        title="오늘 방문자 내역"
+        size="lg"
+      >
+        {detailLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <RefreshCw size={24} className="animate-spin text-slate-300" />
+          </div>
+        ) : todayVisitorLogs.length === 0 ? (
+          <EmptyState
+            icon={<Users size={24} />}
+            title="오늘 방문 내역이 없습니다"
+            description="방문 기록이 여기에 표시됩니다."
+          />
+        ) : (
+          (() => {
+            const pageLabelMap: Record<string, string> = {
+              home: '홈', pension: '펜션', court: '코트대관', matching: '매칭', event: '게임데이',
+              notices: '공지사항', gallery: '갤러리', reviews: '후기', mypage: '마이페이지',
+            };
+            const visitorKey = (log: RawLog) => log.is_member && log.user_name ? `member:${log.user_name}` : `session:${log.session_id}`;
+            if (selectedVisitorKey) {
+              const visitorLogs = todayVisitorLogs.filter((l) => visitorKey(l) === selectedVisitorKey);
+              const firstName = visitorLogs[0]?.is_member && visitorLogs[0]?.user_name ? visitorLogs[0].user_name : '비회원';
+              const isMember = visitorLogs[0]?.is_member ?? false;
+              return (
+                <div className="space-y-1">
+                  <button
+                    onClick={() => setSelectedVisitorKey(null)}
+                    className="flex items-center gap-1.5 text-sm font-semibold text-navy-700 hover:text-navy-900 transition mb-3"
+                  >
+                    <ArrowLeft size={16} /> 목록으로
+                  </button>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold ${isMember ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                      {isMember ? firstName.charAt(0) : <Globe size={16} />}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-navy-900">
+                        {firstName}
+                        <span className={`ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded ${isMember ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-500'}`}>
+                          {isMember ? '회원' : '비회원'}
+                        </span>
+                      </p>
+                      <p className="text-[11px] text-slate-400">오늘 방문 {visitorLogs.length}회 · 7일 {visitorWeekCounts.get(selectedVisitorKey) || 0}회</p>
+                    </div>
+                    <button
+                      onClick={openTodayVisitors}
+                      className="ml-auto rounded-lg p-1.5 bg-white border border-slate-200 text-navy-700 hover:bg-slate-50 transition"
+                      aria-label="새로고침"
+                    >
+                      <RefreshCw size={14} />
+                    </button>
+                  </div>
+                  <div className="relative pl-4 space-y-0">
+                    {visitorLogs.map((log, idx) => (
+                      <div key={log.id} className="relative flex gap-3 pb-3">
+                        {idx < visitorLogs.length - 1 && (
+                          <div className="absolute left-[3px] top-5 bottom-0 w-px bg-slate-200" />
+                        )}
+                        <div className={`w-1.5 h-1.5 rounded-full mt-2 shrink-0 z-10 ${isMember ? 'bg-green-400' : 'bg-slate-300'}`} />
+                        <div className="flex-1 min-w-0 -mt-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-navy-900">{pageLabelMap[log.page] || log.page}</span>
+                            <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
+                              <Clock size={10} />
+                              {new Date(log.created_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                            {formatReferrer(log.referrer)}{log.search_keyword ? ` \u00b7 "${log.search_keyword}"` : ''}{log.ad_platform ? ` \u00b7 ${formatAdPlatform(log.ad_platform)}` : ''}{log.utm_campaign ? ` \u00b7 ${log.utm_campaign}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+            const grouped = new Map<string, { logs: RawLog[]; isMember: boolean; name: string }>();
+            for (const log of todayVisitorLogs) {
+              const key = visitorKey(log);
+              if (!grouped.has(key)) grouped.set(key, { logs: [], isMember: log.is_member, name: log.is_member && log.user_name ? log.user_name : '비회원' });
+              grouped.get(key)!.logs.push(log);
+            }
+            const visitors = Array.from(grouped.entries()).map(([key, v]) => ({ key, ...v })).sort((a, b) => {
+              const aTime = new Date(a.logs[0].created_at).getTime();
+              const bTime = new Date(b.logs[0].created_at).getTime();
+              return bTime - aTime;
+            });
+            return (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs text-slate-400">오늘 방문자 {visitors.length}명 · 총 {todayVisitorLogs.length}건 (최대 1000건)</p>
+                  <button
+                    onClick={openTodayVisitors}
+                    className="rounded-lg p-1.5 bg-white border border-slate-200 text-navy-700 hover:bg-slate-50 transition"
+                    aria-label="새로고침"
+                  >
+                    <RefreshCw size={14} />
+                  </button>
+                </div>
+                {visitors.map((v) => (
+                  <button
+                    key={v.key}
+                    onClick={() => setSelectedVisitorKey(v.key)}
+                    className="w-full flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-slate-50 transition text-left"
+                  >
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${v.isMember ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-500'}`}>
+                      {v.isMember ? <Users size={14} /> : <Globe size={14} />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-navy-900">
+                        {v.name}
+                        <span className={`ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded ${v.isMember ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-500'}`}>
+                          {v.isMember ? '회원' : '비회원'}
+                        </span>
+                        <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-600" title="최근 7일 접속 횟수">
+                          7일 {visitorWeekCounts.get(v.key) || 0}회
+                        </span>
+                      </p>
+                      <p className="text-xs text-slate-400 truncate">
+                        오늘 {v.logs.length}회 · {pageLabelMap[v.logs[0].page] || v.logs[0].page}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-slate-400 shrink-0">
+                      <Clock size={12} />
+                      {new Date(v.logs[0].created_at).toLocaleString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                    <ChevronRight size={16} className="text-slate-300 shrink-0" />
+                  </button>
+                ))}
+              </div>
+            );
+          })()
+        )}
+      </Modal>
+
+      {/* Member visits detail modal */}
+      <Modal
+        open={detailModal === 'memberVisits'}
+        onClose={() => setDetailModal(null)}
+        title="회원 방문 내역"
+        size="lg"
+      >
+        {detailLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <RefreshCw size={24} className="animate-spin text-slate-300" />
+          </div>
+        ) : memberVisitLogs.length === 0 ? (
+          <EmptyState
+            icon={<Users size={24} />}
+            title="회원 방문 내역이 없습니다"
+            description="로그인한 회원의 방문 기록이 여기에 표시됩니다."
+          />
+        ) : (
+          (() => {
+            const byMember = new Map<string, { name: string; logs: RawLog[] }>();
+            for (const log of memberVisitLogs) {
+              const name = log.user_name || '이름 미상';
+              if (!byMember.has(name)) byMember.set(name, { name, logs: [] });
+              byMember.get(name)!.logs.push(log);
+            }
+            const members = Array.from(byMember.values()).sort((a, b) => {
+              const aTime = new Date(a.logs[0].created_at).getTime();
+              const bTime = new Date(b.logs[0].created_at).getTime();
+              return bTime - aTime;
+            });
+            const pageLabelMap: Record<string, string> = {
+              home: '홈', pension: '펜션', court: '코트대관', matching: '매칭', event: '게임데이',
+              notices: '공지사항', gallery: '갤러리', reviews: '후기', mypage: '마이페이지',
+            };
+            return (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-400">회원 {members.length}명 · 총 {memberVisitLogs.length}건 (최대 1000건)</p>
+                {members.map((m) => {
+                  const pages = new Map<string, number>();
+                  for (const log of m.logs) {
+                    pages.set(log.page, (pages.get(log.page) || 0) + 1);
+                  }
+                  const pageList = Array.from(pages.entries()).sort((a, b) => b[1] - a[1]);
+                  const lastVisit = m.logs[0];
+                  return (
+                    <div key={m.name} className="rounded-xl border border-slate-100 overflow-hidden">
+                      <div className="flex items-center gap-3 px-4 py-3 bg-green-50/50">
+                        <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center text-green-700 shrink-0 text-sm font-bold">
+                          {m.name.charAt(0)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-navy-900">
+                            {m.name}
+                            {(() => {
+                              const rc = memberResCounts.get(m.name);
+                              if (!rc) return null;
+                              return (
+                                <>
+                                  {rc.pension > 0 && (
+                                    <span className="ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded bg-volt-50 text-volt-700">
+                                      펜션 {rc.pension}
+                                    </span>
+                                  )}
+                                  {rc.court > 0 && (
+                                    <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-navy-50 text-navy-700">
+                                      코트 {rc.court}
+                                    </span>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </p>
+                          <p className="text-[11px] text-slate-400">방문 {m.logs.length}회</p>
+                        </div>
+                        <div className="flex items-center gap-1 text-[11px] text-slate-400 shrink-0">
+                          <Clock size={11} />
+                          최근 {new Date(lastVisit.created_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
+                      <div className="px-4 py-2.5 flex flex-wrap gap-1.5">
+                        {pageList.map(([page, count]) => (
+                          <span key={page} className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg bg-slate-100 text-navy-700">
+                            {pageLabelMap[page] || page}
+                            <span className="text-[10px] text-slate-400">{count}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()
+        )}
+      </Modal>
+
+      {/* Today signups detail modal */}
+      <Modal
+        open={detailModal === 'todaySignups'}
+        onClose={() => setDetailModal(null)}
+        title="오늘 가입한 회원"
+        size="lg"
+      >
+        {detailLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <RefreshCw size={24} className="animate-spin text-slate-300" />
+          </div>
+        ) : todaySignupList.length === 0 ? (
+          <EmptyState
+            icon={<UserPlus size={24} />}
+            title="오늘 가입한 회원이 없습니다"
+            description="새로 가입한 회원이 여기에 표시됩니다."
+          />
+        ) : (
+          <div className="space-y-1">
+            <p className="text-xs text-slate-400 mb-3">오늘 가입 {todaySignupList.length}명</p>
+            {todaySignupList.map((p) => (
+              <div
+                key={p.id}
+                className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-slate-50 transition"
+              >
+                <div className="w-8 h-8 rounded-full bg-volt-50 flex items-center justify-center text-volt-700 shrink-0 text-xs font-bold">
+                  {(p.nickname || p.name || '?').charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-navy-900 truncate">
+                    {p.nickname || p.name}
+                    {p.nickname && p.nickname !== p.name && (
+                      <span className="text-slate-400 font-normal ml-1">({p.name})</span>
+                    )}
+                  </p>
+                  <p className="text-xs text-slate-400 truncate">{p.email}</p>
+                </div>
+                {p.phone && (
+                  <span className="text-xs text-slate-500 shrink-0 hidden sm:block">{p.phone}</span>
+                )}
+                <div className="flex items-center gap-1 text-xs text-slate-400 shrink-0">
+                  <Clock size={12} />
+                  {new Date(p.created_at).toLocaleString('ko-KR', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
