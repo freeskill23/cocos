@@ -1,8 +1,2 @@
-[functions.admin-notice-reply]
-verify_jwt = false
-
-[functions.admin-users]
-verify_jwt = false
-
-[functions.telegram-notify]
+[functions.analytics-collect]
 verify_jwt = false
