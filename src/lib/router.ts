@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback } from "react";
 
 function getHashPath(): string {
   const hash = window.location.hash.replace(/^#/, "");
-  return hash || "/";
+  const queryIndex = hash.indexOf("?");
+  const path = queryIndex >= 0 ? hash.slice(0, queryIndex) : hash;
+  return path || "/";
 }
 
 export function useRouter() {

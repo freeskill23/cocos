@@ -30,7 +30,8 @@ export function CardPaymentResult({ merchantId, onNavigate }: CardPaymentResultP
         }
         setOrder(data);
 
-        const urlParams = new URLSearchParams(window.location.search);
+        const hashQuery = window.location.hash.split("?")[1] ?? "";
+        const urlParams = new URLSearchParams(hashQuery);
         const paymentStatus = urlParams.get("status");
         const paymentId = urlParams.get("paymentId");
         const errorCode = urlParams.get("code");
