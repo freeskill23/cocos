@@ -135,12 +135,12 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
           redirectUrl,
         });
 
-        if (result && "paymentId" in result && !result.code) {
+        if (result && "code" in result && result.code) {
+          setSubmitError(result.message ?? "결제가 실패했습니다. 다시 시도해주세요.");
+        } else if (result && "paymentId" in result && !result.code) {
           await confirmCardPaymentByMerchant(firstMerchantId, result.paymentId);
           if (buyNowItem) { clearBuyNow(); } else { await clear(); }
           onNavigate(`/pay/card/${firstMerchantId}`);
-        } else {
-          setSubmitError(result?.message ?? "결제가 실패했습니다. 다시 시도해주세요.");
         }
       } else {
         const createdNumbers: string[] = [];

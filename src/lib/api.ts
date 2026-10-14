@@ -324,15 +324,19 @@ export async function confirmCardPayment(
   orderId: string,
   portonePaymentId: string
 ): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("orders")
     .update({
       status: "paid",
       portone_payment_id: portonePaymentId,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", orderId);
+    .eq("id", orderId)
+    .select("id");
   if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error("결제 상태 업데이트에 실패했습니다.");
+  }
 }
 
 export async function fetchOrderById(id: string): Promise<OrderRow | null> {

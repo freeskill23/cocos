@@ -30,8 +30,9 @@ export function CardPaymentResult({ merchantId, onNavigate }: CardPaymentResultP
         }
         setOrder(data);
 
+        const searchQuery = window.location.search.replace(/^\?/, "");
         const hashQuery = window.location.hash.split("?")[1] ?? "";
-        const urlParams = new URLSearchParams(hashQuery);
+        const urlParams = new URLSearchParams(searchQuery || hashQuery);
         const paymentStatus = urlParams.get("status");
         const paymentId = urlParams.get("paymentId");
         const errorCode = urlParams.get("code");
@@ -47,8 +48,11 @@ export function CardPaymentResult({ merchantId, onNavigate }: CardPaymentResultP
         } else if (paymentStatus === "FAILED") {
           setStatus("failed");
           setError("결제가 실패했습니다. 다시 시도해주세요.");
-        } else {
+        } else if (data.status === "paid") {
           setStatus("success");
+        } else {
+          setStatus("failed");
+          setError("결제가 완료되지 않았습니다. 다시 시도해주세요.");
         }
       } catch {
         setError("결제 검증 중 오류가 발생했습니다.");
