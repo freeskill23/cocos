@@ -64,6 +64,7 @@ export function Step3Order({
           optionName: opt.name,
           valueLabel: val?.label ?? "",
           price: val?.price ?? 0,
+          quantity: 1,
         };
       })
       .filter((s) => s.valueLabel);

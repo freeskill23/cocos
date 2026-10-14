@@ -34,12 +34,14 @@ export function CardPaymentResult({ merchantId, onNavigate }: CardPaymentResultP
         const hashQuery = window.location.hash.split("?")[1] ?? "";
         const urlParams = new URLSearchParams(searchQuery || hashQuery);
         const paymentStatus = urlParams.get("status");
-        const paymentId = urlParams.get("paymentId");
+        const paymentId = urlParams.get("paymentId") ?? urlParams.get("payment_id");
         const errorCode = urlParams.get("code");
+        const errorMessage = urlParams.get("message") ?? urlParams.get("pgMessage");
+        const pgCode = urlParams.get("pgCode") ?? urlParams.get("pg_code");
 
         if (errorCode) {
           setStatus("failed");
-          setError("결제가 실패했습니다. 다시 시도해주세요.");
+          setError([errorMessage, pgCode ? `오류 코드: ${pgCode}` : null].filter(Boolean).join(" ") || "결제가 실패했습니다. 다시 시도해주세요.");
         } else if (paymentStatus === "PAID" || (paymentId && !errorCode)) {
           if (paymentId && data.portone_payment_id !== paymentId) {
             await confirmCardPayment(data.id, paymentId);
@@ -47,7 +49,7 @@ export function CardPaymentResult({ merchantId, onNavigate }: CardPaymentResultP
           setStatus("success");
         } else if (paymentStatus === "FAILED") {
           setStatus("failed");
-          setError("결제가 실패했습니다. 다시 시도해주세요.");
+          setError([errorMessage, pgCode ? `오류 코드: ${pgCode}` : null].filter(Boolean).join(" ") || "결제가 실패했습니다. 다시 시도해주세요.");
         } else if (data.status === "paid") {
           setStatus("success");
         } else {

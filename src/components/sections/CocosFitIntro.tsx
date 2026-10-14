@@ -14,6 +14,8 @@ const DEMO_PRODUCT = {
   base_depth: 550,
   base_height: 600,
   base_price: 50000,
+  shipping_fee: null,
+  free_shipping_threshold: null,
 };
 
 export function CocosFitIntro({ onNavigate }: CocosFitIntroProps) {
