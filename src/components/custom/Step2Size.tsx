@@ -1,3 +1,4 @@
+import { Minus, Plus } from "lucide-react";
 import { WizardNav } from "@/components/WizardNav";
 import { SizePreview } from "@/components/SizePreview";
 import { StepHeader, Field } from "@/components/custom/Step1Product";
@@ -120,6 +121,15 @@ function SizeInput({
   return (
     <Field label={`${label}`}>
       <div className="flex items-center gap-2 sm:gap-3">
+        <button
+          type="button"
+          onClick={() => onChange(snap(value - step))}
+          disabled={value <= min}
+          aria-label={`${label} ${step}mm 줄이기`}
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-birch-200 bg-white text-charcoal transition-colors hover:bg-birch-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-35"
+        >
+          <Minus size={18} />
+        </button>
         <input
           type="number"
           value={value}
@@ -130,9 +140,18 @@ function SizeInput({
             const v = Number(e.target.value);
             if (!isNaN(v)) onChange(snap(v));
           }}
-          className="w-20 shrink-0 rounded-xl border border-birch-200 bg-white px-3 py-3 text-right text-base font-semibold text-charcoal focus:border-birch-400 focus:outline-none focus:ring-2 focus:ring-birch-200 sm:w-28 sm:text-lg"
+          className="w-20 shrink-0 rounded-xl border border-birch-200 bg-white px-2 py-3 text-center text-base font-semibold text-charcoal focus:border-birch-400 focus:outline-none focus:ring-2 focus:ring-birch-200 sm:w-28 sm:text-lg"
         />
         <span className="shrink-0 text-sm text-charcoal-muted">mm</span>
+        <button
+          type="button"
+          onClick={() => onChange(snap(value + step))}
+          disabled={value >= max}
+          aria-label={`${label} ${step}mm 늘리기`}
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-birch-200 bg-white text-charcoal transition-colors hover:bg-birch-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-35"
+        >
+          <Plus size={18} />
+        </button>
         {adjust > 0 && (
           <span className="ml-auto text-xs font-medium text-birch-500">
             +{formatWon(adjust)}

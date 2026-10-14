@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Minus, Plus } from "lucide-react";
 import { Reveal } from "@/components/Reveal";
 import { SizePreview } from "@/components/SizePreview";
 import { DEFAULT_PRICING, DEFAULT_SIZES } from "@/config/pricing";
@@ -129,17 +129,36 @@ function DimensionSlider({ label, value, min, max, onChange }: DimensionSliderPr
       <div className="flex items-center justify-between">
         <label className="text-sm font-medium text-charcoal">{label}</label>
         <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => onChange(Math.max(min, value - 10))}
+            disabled={value <= min}
+            aria-label={`${label} 10mm 줄이기`}
+            className="flex h-10 w-10 items-center justify-center rounded-lg border border-birch-200 bg-white text-charcoal transition-colors hover:bg-birch-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            <Minus size={16} />
+          </button>
           <input
             type="number"
             value={value}
             min={min}
             max={max}
+            step={10}
             onChange={(e) => {
               const v = Number(e.target.value);
               if (!isNaN(v)) onChange(Math.max(min, Math.min(max, v)));
             }}
-            className="w-20 rounded-lg border border-birch-200 bg-white px-3 py-1.5 text-right text-sm font-semibold text-charcoal focus:border-birch-400 focus:outline-none focus:ring-2 focus:ring-birch-200"
+            className="w-20 rounded-lg border border-birch-200 bg-white px-2 py-2 text-center text-sm font-semibold text-charcoal focus:border-birch-400 focus:outline-none focus:ring-2 focus:ring-birch-200"
           />
+          <button
+            type="button"
+            onClick={() => onChange(Math.min(max, value + 10))}
+            disabled={value >= max}
+            aria-label={`${label} 10mm 늘리기`}
+            className="flex h-10 w-10 items-center justify-center rounded-lg border border-birch-200 bg-white text-charcoal transition-colors hover:bg-birch-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            <Plus size={16} />
+          </button>
           <span className="text-sm text-charcoal-muted">mm</span>
         </div>
       </div>
