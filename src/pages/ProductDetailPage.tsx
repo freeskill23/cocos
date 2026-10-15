@@ -456,12 +456,45 @@ function SizeSlider({ label, value, min, max, step, onChange }: {
   step: number;
   onChange: (v: number) => void;
 }) {
-  const snap = (v: number) => Math.round(v / step) * step;
+  const snap = (v: number) => Math.max(min, Math.min(max, Math.round(v / step) * step));
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <span className="text-xs text-charcoal-muted">{label}</span>
-        <span className="text-xs font-medium text-charcoal">{value}mm</span>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => onChange(snap(value - step))}
+            disabled={value <= min}
+            aria-label={`${label} ${step}mm 줄이기`}
+            className="flex h-11 w-11 items-center justify-center rounded-xl border border-birch-200 bg-white text-charcoal transition-colors hover:bg-birch-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            <Minus size={17} />
+          </button>
+          <input
+            type="number"
+            value={value}
+            min={min}
+            max={max}
+            step={step}
+            onChange={(e) => {
+              const parsed = Number(e.target.value);
+              if (Number.isFinite(parsed)) onChange(snap(parsed));
+            }}
+            aria-label={`${label} 사이즈`}
+            className="w-20 rounded-xl border border-birch-200 bg-white px-2 py-2.5 text-center text-sm font-semibold text-charcoal focus:border-birch-400 focus:outline-none focus:ring-2 focus:ring-birch-200"
+          />
+          <button
+            type="button"
+            onClick={() => onChange(snap(value + step))}
+            disabled={value >= max}
+            aria-label={`${label} ${step}mm 늘리기`}
+            className="flex h-11 w-11 items-center justify-center rounded-xl border border-birch-200 bg-white text-charcoal transition-colors hover:bg-birch-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            <Plus size={17} />
+          </button>
+          <span className="text-xs font-medium text-charcoal">mm</span>
+        </div>
       </div>
       <input
         type="range"
@@ -470,8 +503,13 @@ function SizeSlider({ label, value, min, max, step, onChange }: {
         step={step}
         value={value}
         onChange={(e) => onChange(snap(Number(e.target.value)))}
-        className="mt-1.5 w-full accent-birch-600"
+        aria-label={`${label} 슬라이더`}
+        className="mt-3 h-2 w-full cursor-pointer accent-birch-600"
       />
+      <div className="mt-1.5 flex justify-between text-[10px] text-charcoal-muted">
+        <span>{min}mm</span>
+        <span>{max}mm</span>
+      </div>
     </div>
   );
 }
