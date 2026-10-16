@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import { LogOut, Mail, Loader2, Package, ChevronRight, XCircle, X, Truck, Search, AlertCircle, Building2, Copy, Check } from "lucide-react";
+import { LogOut, Mail, Loader2, Package, ChevronRight, XCircle, X, Truck, Search, AlertCircle, Building2, Copy, Check, PencilLine, Star } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
-import { cancelOrderWithRefund, cancelCardPayment, fetchSettings } from "@/lib/api";
+import { cancelOrderWithRefund, cancelCardPayment, fetchSettings, hasReviewForOrder } from "@/lib/api";
 import { copyToClipboard } from "@/lib/clipboard";
 import { BRAND } from "@/config/brand";
 import { formatWon } from "@/lib/pricing";
 import type { OrderRow, BankAccount } from "@/types/database";
+import { ReviewForm } from "@/components/ReviewForm";
 
 interface AccountPageProps {
   onNavigate: (to: string) => void;
@@ -26,6 +27,10 @@ export function AccountPage({ onNavigate }: AccountPageProps) {
   const [selectedOrder, setSelectedOrder] = useState<OrderRow | null>(null);
   const [cancellingOrder, setCancellingOrder] = useState<OrderRow | null>(null);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [reviewOrder, setReviewOrder] = useState<OrderRow | null>(null);
+  const [reviewedOrderIds, setReviewedOrderIds] = useState<Set<string>>(new Set());
+  const [reviewSubmitted, setReviewSubmitted] = useState(false);
 
   useEffect(() => {
     fetchSettings().then((settings) => {
@@ -43,9 +48,16 @@ export function AccountPage({ onNavigate }: AccountPageProps) {
       .select("*")
       .eq("customer_email", session.user.email)
       .order("created_at", { ascending: false })
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         setOrders(data ?? []);
         setLoading(false);
+        const reviewable = (data ?? []).filter((o) => ["shipped", "completed"].includes(o.status));
+        if (reviewable.length > 0) {
+          const results = await Promise.all(
+            reviewable.map((o) => hasReviewForOrder(o.id).then((has) => ({ id: o.id, has })))
+          );
+          setReviewedOrderIds(new Set(results.filter((r) => r.has).map((r) => r.id)));
+        }
       });
   }, [session]);
 
@@ -252,9 +264,38 @@ export function AccountPage({ onNavigate }: AccountPageProps) {
           onCancelClick={(o) => { setSelectedOrder(null); setCancellingOrder(o); }}
           cancelling={cancellingId === selectedOrder.id}
           canCancel={cancellableStatuses.includes(selectedOrder.status)}
+          canReview={["shipped", "completed"].includes(selectedOrder.status)}
+          alreadyReviewed={reviewedOrderIds.has(selectedOrder.id)}
+          onReviewClick={() => { setReviewOrder(selectedOrder); setShowReviewForm(true); }}
           statusLabels={statusLabels}
           statusColors={statusColors}
         />
+      )}
+
+      {showReviewForm && reviewOrder && (
+        <ReviewForm
+          order={reviewOrder}
+          onSaved={() => {
+            setShowReviewForm(false);
+            setReviewSubmitted(true);
+            setReviewedOrderIds((prev) => new Set(prev).add(reviewOrder.id));
+            setReviewOrder(null);
+          }}
+          onClose={() => { setShowReviewForm(false); setReviewOrder(null); }}
+        />
+      )}
+
+      {reviewSubmitted && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setReviewSubmitted(false)}>
+          <div className="rounded-2xl bg-white px-6 py-5 text-center shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+              <Check size={24} className="text-green-600" />
+            </div>
+            <p className="mt-3 text-sm font-medium text-charcoal">후기가 등록되었습니다.</p>
+            <p className="mt-1 text-xs text-charcoal-muted">소중한 후기 감사합니다.</p>
+            <button onClick={() => setReviewSubmitted(false)} className="btn-outline mt-4 text-sm">확인</button>
+          </div>
+        </div>
       )}
 
       {cancellingOrder && (
@@ -405,6 +446,9 @@ function OrderDetailModal({
   onCancelClick,
   cancelling,
   canCancel,
+  canReview,
+  alreadyReviewed,
+  onReviewClick,
   statusLabels,
   statusColors,
 }: {
@@ -414,6 +458,9 @@ function OrderDetailModal({
   onCancelClick: (order: OrderRow) => void;
   cancelling: boolean;
   canCancel: boolean;
+  canReview: boolean;
+  alreadyReviewed: boolean;
+  onReviewClick: () => void;
   statusLabels: Record<string, string>;
   statusColors: Record<string, string>;
 }) {
@@ -565,18 +612,35 @@ function OrderDetailModal({
           주문 일시: {created.toLocaleDateString("ko-KR")} {created.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
         </div>
 
-        <div className="mt-6 flex gap-3">
-          <button onClick={onClose} className="btn-outline flex-1">닫기</button>
-          {canCancel && (
+        <div className="mt-6 flex flex-col gap-3">
+          {canReview && !alreadyReviewed && (
             <button
-              onClick={() => onCancelClick(order)}
-              disabled={cancelling}
-              className="inline-flex items-center justify-center gap-1.5 rounded-full border-2 border-red-300 bg-white px-6 py-3 text-sm font-medium text-red-600 transition-all hover:bg-red-50 active:scale-[0.98] disabled:opacity-50"
+              onClick={onReviewClick}
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-charcoal py-3.5 text-sm font-medium text-ivory transition-all hover:bg-charcoal-light active:scale-[0.98]"
             >
-              {cancelling ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={16} />}
-              주문 취소
+              <PencilLine size={16} />
+              사용 후기 작성하기
             </button>
           )}
+          {canReview && alreadyReviewed && (
+            <div className="flex items-center justify-center gap-2 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-700">
+              <Check size={16} />
+              후기가 등록된 주문입니다.
+            </div>
+          )}
+          <div className="flex gap-3">
+            <button onClick={onClose} className="btn-outline flex-1">닫기</button>
+            {canCancel && (
+              <button
+                onClick={() => onCancelClick(order)}
+                disabled={cancelling}
+                className="inline-flex items-center justify-center gap-1.5 rounded-full border-2 border-red-300 bg-white px-6 py-3 text-sm font-medium text-red-600 transition-all hover:bg-red-50 active:scale-[0.98] disabled:opacity-50"
+              >
+                {cancelling ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={16} />}
+                주문 취소
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
