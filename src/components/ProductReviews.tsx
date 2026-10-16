@@ -46,19 +46,19 @@ export function ProductReviews({ productId }: ProductReviewsProps) {
     <div className="mt-12 border-t border-birch-200 pt-10">
       <h2 className="font-serif text-2xl text-charcoal sm:text-3xl">사용 후기</h2>
 
-      <div className="mt-6 flex items-center gap-6 rounded-2xl bg-birch-50 px-6 py-5">
-        <div className="flex flex-col items-center">
+      <div className="mt-6 flex flex-col gap-4 rounded-2xl bg-birch-50 px-4 py-5 sm:flex-row sm:items-center sm:gap-6 sm:px-6">
+        <div className="flex items-center gap-4 sm:flex-col sm:items-center sm:gap-0">
           <div className="flex items-center gap-1">
             {Array.from({ length: 5 }).map((_, i) => (
               <Star
                 key={i}
-                size={28}
+                size={24}
                 className={i < Math.round(avgRating) ? "text-birch-500" : "text-birch-200"}
                 fill={i < Math.round(avgRating) ? "currentColor" : "none"}
               />
             ))}
           </div>
-          <p className="mt-2 text-2xl font-bold text-charcoal">{avgRounded}<span className="text-base text-charcoal-muted"> / 5</span></p>
+          <p className="text-2xl font-bold text-charcoal">{avgRounded}<span className="text-base text-charcoal-muted"> / 5</span></p>
         </div>
         <div className="flex flex-col gap-1.5">
           {[5, 4, 3, 2, 1].map((star) => {
@@ -66,16 +66,16 @@ export function ProductReviews({ productId }: ProductReviewsProps) {
             const pct = reviews.length > 0 ? (count / reviews.length) * 100 : 0;
             return (
               <div key={star} className="flex items-center gap-2">
-                <span className="w-6 text-xs text-charcoal-muted">{star}점</span>
-                <div className="h-2 w-32 overflow-hidden rounded-full bg-birch-200">
+                <span className="w-6 shrink-0 text-xs text-charcoal-muted">{star}점</span>
+                <div className="h-2 w-24 overflow-hidden rounded-full bg-birch-200 sm:w-32">
                   <div className="h-full rounded-full bg-birch-500" style={{ width: `${pct}%` }} />
                 </div>
-                <span className="w-6 text-xs text-charcoal-muted">{count}</span>
+                <span className="w-6 shrink-0 text-xs text-charcoal-muted">{count}</span>
               </div>
             );
           })}
         </div>
-        <div className="ml-auto text-sm text-charcoal-muted">
+        <div className="text-sm text-charcoal-muted sm:ml-auto">
           총 {reviews.length}개 후기
         </div>
       </div>

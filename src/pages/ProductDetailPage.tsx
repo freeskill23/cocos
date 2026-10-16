@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Loader2, Package, ShoppingBag, Check, Minus, Plus } from "lucide-react";
+import { scrollToSection } from "@/lib/scroll";
 import { fetchProductById, fetchSettings } from "@/lib/api";
 import { useCart } from "@/hooks/useCart";
 import type { ProductRow, SelectedOption } from "@/types/database";
@@ -406,8 +407,25 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
               </div>
             </div>
 
+            <div className="sticky top-16 z-20 mt-10 flex gap-1 border-b border-birch-200 bg-ivory/95 backdrop-blur sm:top-20">
+              {product.detail_content && (
+                <button
+                  onClick={() => scrollToSection("detail-section")}
+                  className="px-5 py-3 text-sm font-medium text-charcoal transition-colors hover:text-birch-600"
+                >
+                  상세정보
+                </button>
+              )}
+              <button
+                onClick={() => scrollToSection("reviews-section")}
+                className="px-5 py-3 text-sm font-medium text-charcoal transition-colors hover:text-birch-600"
+              >
+                사용 후기
+              </button>
+            </div>
+
             {product.detail_content && (
-              <div className="mt-12 border-t border-birch-200 pt-10">
+              <div id="detail-section" className="mt-10 scroll-mt-32 border-t border-birch-200 pt-10">
                 <h2 className="font-serif text-2xl text-charcoal sm:text-3xl">상세 정보</h2>
                 <div className="mt-6 space-y-6">
                   {parseDetailContent(product.detail_content).map((block) =>
@@ -434,7 +452,9 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
               </div>
             )}
 
-            <ProductReviews productId={product.id} />
+            <div id="reviews-section" className="scroll-mt-32">
+              <ProductReviews productId={product.id} />
+            </div>
           </div>
         ) : null}
       </div>

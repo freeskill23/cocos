@@ -504,8 +504,8 @@ export async function upsertReview(item: Partial<ReviewRow> & { review: string; 
 export function maskAuthor(author: string): string {
   if (!author) return author;
   const trimmed = author.trim();
-  if (trimmed.length <= 4) return trimmed[0] + "*".repeat(Math.max(0, trimmed.length - 1));
-  return trimmed.slice(0, 4) + "*".repeat(trimmed.length - 4);
+  if (trimmed.length <= 3) return trimmed[0] + "*".repeat(Math.max(0, trimmed.length - 1));
+  return trimmed.slice(0, 3) + "*".repeat(trimmed.length - 3);
 }
 
 export async function deleteReview(id: string): Promise<void> {

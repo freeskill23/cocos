@@ -166,6 +166,9 @@ function ReviewEditor({
   const [hoverRating, setHoverRating] = useState(0);
   const [imageUrls, setImageUrls] = useState<string[]>(item?.image_urls ?? []);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [createdAt, setCreatedAt] = useState(
+    item?.created_at ? new Date(item.created_at).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -222,6 +225,7 @@ function ReviewEditor({
         product_id: productId || null,
         order_id: item?.order_id ?? null,
         image_urls: allImages.length > 0 ? allImages : null,
+        created_at: new Date(createdAt).toISOString(),
       });
       onSaved();
     } catch (err) {
@@ -293,6 +297,15 @@ function ReviewEditor({
 
           <FormField label="작성자 (임의 입력)">
             <input value={author} onChange={(e) => setAuthor(e.target.value)} className="input-field" placeholder="예: 서울 송파구 · 김OO" />
+          </FormField>
+
+          <FormField label="작성 날짜">
+            <input
+              type="date"
+              value={createdAt}
+              onChange={(e) => setCreatedAt(e.target.value)}
+              className="input-field"
+            />
           </FormField>
 
           <FormField label="사진 첨부 (최대 5장)">
