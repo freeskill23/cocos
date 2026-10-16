@@ -168,9 +168,13 @@ function ProductEditor({
   const [customizableDepth, setCustomizableDepth] = useState(item?.customizable_depth ?? true);
   const [customizableHeight, setCustomizableHeight] = useState(item?.customizable_height ?? true);
   const [sizeStep, setSizeStep] = useState(item?.size_step ?? 10);
+  const [maxWidth, setMaxWidth] = useState<string>(item?.max_width?.toString() ?? "");
+  const [maxDepth, setMaxDepth] = useState<string>(item?.max_depth?.toString() ?? "");
+  const [maxHeight, setMaxHeight] = useState<string>(item?.max_height?.toString() ?? "");
   const [useDefaultShipping, setUseDefaultShipping] = useState(item?.shipping_fee === null && item?.free_shipping_threshold === null);
   const [shippingFee, setShippingFee] = useState(item?.shipping_fee ?? 15000);
   const [freeShippingThreshold, setFreeShippingThreshold] = useState(item?.free_shipping_threshold ?? 200000);
+  const [fakeDailyPurchases, setFakeDailyPurchases] = useState(item?.fake_daily_purchases ?? 0);
   const [options, setOptions] = useState<ProductOption[]>(
     (item?.options ?? []).map((o) => ({
       ...o,
@@ -208,8 +212,12 @@ function ProductEditor({
         customizable_depth: customizableDepth,
         customizable_height: customizableHeight,
         size_step: sizeStep,
+        max_width: maxWidth.trim() === "" ? null : Number(maxWidth) || null,
+        max_depth: maxDepth.trim() === "" ? null : Number(maxDepth) || null,
+        max_height: maxHeight.trim() === "" ? null : Number(maxHeight) || null,
         shipping_fee: useDefaultShipping ? null : shippingFee,
         free_shipping_threshold: useDefaultShipping ? null : freeShippingThreshold,
+        fake_daily_purchases: fakeDailyPurchases,
         options,
       });
       onSaved();
@@ -317,6 +325,19 @@ function ProductEditor({
                     5mm
                   </button>
                 </div>
+                <p className="mt-4 text-xs font-semibold text-charcoal">축별 최대 사이즈 (mm)</p>
+                <p className="mt-1 text-xs text-charcoal-muted">비워두면 설정에 등록된 전역 최대값이 적용됩니다.</p>
+                <div className="mt-3 grid gap-4 sm:grid-cols-3">
+                  <FormField label="가로 최대">
+                    <input type="number" value={maxWidth} onChange={(e) => setMaxWidth(e.target.value)} className="input-field" placeholder="전역 설정 사용" />
+                  </FormField>
+                  <FormField label="세로 최대">
+                    <input type="number" value={maxDepth} onChange={(e) => setMaxDepth(e.target.value)} className="input-field" placeholder="전역 설정 사용" />
+                  </FormField>
+                  <FormField label="높이 최대">
+                    <input type="number" value={maxHeight} onChange={(e) => setMaxHeight(e.target.value)} className="input-field" placeholder="전역 설정 사용" />
+                  </FormField>
+                </div>
               </div>
             )}
           </FormField>
@@ -341,6 +362,10 @@ function ProductEditor({
           </div>
           <FormField label="기본 가격 (원)">
             <input type="number" value={basePrice} onChange={(e) => setBasePrice(Number(e.target.value) || 0)} className="input-field" />
+          </FormField>
+          <FormField label="오늘 구매자 수 표시">
+            <input type="number" min={0} value={fakeDailyPurchases} onChange={(e) => setFakeDailyPurchases(Math.max(0, Number(e.target.value) || 0))} className="input-field" placeholder="0" />
+            <p className="mt-1.5 text-xs text-charcoal-muted">상세 페이지에 “오늘 N명이 구매했습니다”로 표시됩니다. 0으로 설정하면 표시되지 않습니다.</p>
           </FormField>
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField label="표시 순서">

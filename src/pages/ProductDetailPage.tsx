@@ -9,6 +9,7 @@ import { calculatePrice, formatWon } from "@/lib/pricing";
 import { parseDetailContent } from "@/components/admin/DetailEditor";
 import { SizePreview } from "@/components/SizePreview";
 import { ProductReviews } from "@/components/ProductReviews";
+import { getTodaysPurchaseCount } from "@/lib/purchaseDisplay";
 
 interface ProductDetailPageProps {
   productId: string;
@@ -48,10 +49,13 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
         setPricing(ps);
         setSizes(ss);
         if (data.size_customizable) {
+          const maxW = data.max_width ?? ss.maxWidth;
+          const maxD = data.max_depth ?? ss.maxDepth;
+          const maxH = data.max_height ?? ss.maxHeight;
           setDimensions({
-            width: Math.max(ss.minWidth, Math.min(ss.maxWidth, data.base_width)),
-            depth: Math.max(ss.minDepth, Math.min(ss.maxDepth, data.base_depth)),
-            height: Math.max(ss.minHeight, Math.min(ss.maxHeight, data.base_height)),
+            width: Math.max(ss.minWidth, Math.min(maxW, data.base_width)),
+            depth: Math.max(ss.minDepth, Math.min(maxD, data.base_depth)),
+            height: Math.max(ss.minHeight, Math.min(maxH, data.base_height)),
           });
         } else {
           setDimensions({ width: data.base_width, depth: data.base_depth, height: data.base_height });
@@ -176,6 +180,18 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
 
                 <div className="flex flex-col">
                   <h1 className="font-serif text-3xl text-charcoal sm:text-4xl">{product.name}</h1>
+                  {product.fake_daily_purchases > 0 && (() => {
+                    const count = getTodaysPurchaseCount(product.fake_daily_purchases);
+                    return (
+                      <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-birch-50 px-3 py-1.5 text-xs font-medium text-birch-700">
+                        <span className="relative flex h-2 w-2">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-birch-400 opacity-75" />
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-birch-500" />
+                        </span>
+                        오늘 {count}명이 구매했습니다
+                      </div>
+                    );
+                  })()}
                   <p className="mt-3 text-sm leading-relaxed text-charcoal-muted">{product.description}</p>
 
                   <div className="mt-6 rounded-2xl bg-birch-50 p-5">
@@ -197,22 +213,22 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
                           width={dimensions.width}
                           depth={dimensions.depth}
                           height={dimensions.height}
-                          maxW={sizes.maxWidth}
-                          maxD={sizes.maxDepth}
-                          maxH={sizes.maxHeight}
+                          maxW={product.max_width ?? sizes.maxWidth}
+                          maxD={product.max_depth ?? sizes.maxDepth}
+                          maxH={product.max_height ?? sizes.maxHeight}
                         />
                       </div>
                       <div className="space-y-3">
                         {product.customizable_width !== false && (
-                          <SizeSlider label="가로" value={dimensions.width} min={sizes.minWidth} max={sizes.maxWidth} step={product.size_step ?? 10}
+                          <SizeSlider label="가로" value={dimensions.width} min={sizes.minWidth} max={product.max_width ?? sizes.maxWidth} step={product.size_step ?? 10}
                             onChange={(v) => setDimensions({ ...dimensions, width: v })} />
                         )}
                         {product.customizable_depth !== false && (
-                          <SizeSlider label="세로" value={dimensions.depth} min={sizes.minDepth} max={sizes.maxDepth} step={product.size_step ?? 10}
+                          <SizeSlider label="세로" value={dimensions.depth} min={sizes.minDepth} max={product.max_depth ?? sizes.maxDepth} step={product.size_step ?? 10}
                             onChange={(v) => setDimensions({ ...dimensions, depth: v })} />
                         )}
                         {product.customizable_height !== false && (
-                          <SizeSlider label="높이" value={dimensions.height} min={sizes.minHeight} max={sizes.maxHeight} step={product.size_step ?? 10}
+                          <SizeSlider label="높이" value={dimensions.height} min={sizes.minHeight} max={product.max_height ?? sizes.maxHeight} step={product.size_step ?? 10}
                             onChange={(v) => setDimensions({ ...dimensions, height: v })} />
                         )}
                       </div>

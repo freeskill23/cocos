@@ -51,8 +51,12 @@ export interface ProductRow {
   customizable_depth: boolean;
   customizable_height: boolean;
   size_step: number;
+  max_width: number | null;
+  max_depth: number | null;
+  max_height: number | null;
   shipping_fee: number | null;
   free_shipping_threshold: number | null;
+  fake_daily_purchases: number;
   created_at: string;
   updated_at: string;
 }
