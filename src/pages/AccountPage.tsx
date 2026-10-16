@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { LogOut, Mail, Loader2, Package, ChevronRight, XCircle, X, Truck, Search, AlertCircle, Building2, Copy, Check } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
-import { cancelOrderWithRefund, cancelCardOrder, fetchSettings } from "@/lib/api";
+import { cancelOrderWithRefund, cancelCardPayment, fetchSettings } from "@/lib/api";
 import { copyToClipboard } from "@/lib/clipboard";
 import { BRAND } from "@/config/brand";
 import { formatWon } from "@/lib/pricing";
@@ -85,7 +85,7 @@ export function AccountPage({ onNavigate }: AccountPageProps) {
   const handleCancelCard = async (id: string) => {
     setCancellingId(id);
     try {
-      await cancelCardOrder(id, "고객 주문 취소 요청");
+      await cancelCardPayment(id, "고객 주문 취소 요청");
       updateOrderInState(id, { status: "cancelled", card_cancel_reason: "고객 주문 취소 요청" });
       setCancellingOrder(null);
     } catch {

@@ -442,17 +442,11 @@ export async function completeRefund(id: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function cancelCardOrder(id: string, cancelReason: string): Promise<void> {
-  const { error } = await supabase
-    .from("orders")
-    .update({
-      status: "cancelled",
-      card_cancel_reason: cancelReason,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id)
-    .in("status", ["payment_pending", "paid"]);
-  if (error) throw error;
+export async function cancelCardPayment(id: string, reason: string): Promise<void> {
+  const { data, error } = await supabase.functions.invoke("cancel-portone-payment", {
+    body: { orderId: id, reason },
+  });
+  if (error || !data?.success) throw new Error("결제 취소에 실패했습니다.");
 }
 
 export async function upsertPortfolioItem(item: Partial<PortfolioRow> & { dog_name: string; breed: string; weight: string; size: string; note: string }): Promise<void> {

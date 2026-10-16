@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { Trash2, ChevronDown, ChevronUp, Loader2, RefreshCw, Copy, Check, Printer, Save, Truck, CheckCircle2, Hammer, XCircle } from "lucide-react";
-import { fetchAllOrders, updateOrderStatus, updateOrderMemo, deleteOrder, bulkDeleteOrders, updateOrderShipping, autoCompleteShippedOrders, completeRefund } from "@/lib/api";
+import { fetchAllOrders, updateOrderStatus, updateOrderMemo, deleteOrder, bulkDeleteOrders, updateOrderShipping, autoCompleteShippedOrders, completeRefund, cancelCardPayment } from "@/lib/api";
 import type { OrderRow } from "@/types/database";
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, SHIPPING_COMPANIES, type OrderStatus } from "@/lib/supabase";
 import { formatWon } from "@/lib/pricing";
@@ -73,6 +73,17 @@ export function OrdersTab({ onCountChange }: OrdersTabProps) {
       setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, memo } : o)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "메모 저장에 실패했습니다.");
+    }
+  };
+
+  const handleCardCancel = async (id: string) => {
+    const reason = window.prompt("카드 결제 취소 사유를 입력해주세요.", "고객 요청")?.trim();
+    if (!reason) return;
+    try {
+      await cancelCardPayment(id, reason);
+      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: "cancelled", card_cancel_reason: reason } : o)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "결제 취소에 실패했습니다.");
     }
   };
 
@@ -221,6 +232,7 @@ export function OrdersTab({ onCountChange }: OrdersTabProps) {
               onDelete={handleDelete}
               onMemoSave={handleMemoSave}
               onRefundComplete={handleRefundComplete}
+              onCardCancel={handleCardCancel}
             />
           ))}
         </div>
@@ -261,6 +273,7 @@ function OrderCard({
   onDelete,
   onMemoSave,
   onRefundComplete,
+  onCardCancel,
 }: {
   order: OrderRow;
   expanded: boolean;
@@ -272,6 +285,7 @@ function OrderCard({
   onDelete: (id: string) => void;
   onMemoSave: (id: string, memo: string) => void;
   onRefundComplete: (id: string) => void;
+  onCardCancel: (id: string) => void;
 }) {
   const status = order.status as OrderStatus;
   const created = new Date(order.created_at);
@@ -592,11 +606,11 @@ function OrderCard({
 
                 {(status === "payment_pending" || status === "paid") && (
                   <button
-                    onClick={() => onStatusChange(order.id, "cancelled")}
+                    onClick={() => order.payment_method === "card" ? onCardCancel(order.id) : onStatusChange(order.id, "cancelled")}
                     className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
                   >
                     <XCircle size={16} />
-                    주문 취소
+                    {order.payment_method === "card" ? "카드 결제 취소" : "주문 취소"}
                   </button>
                 )}
               </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Search, Loader2, Package, XCircle, ArrowLeft, X, AlertCircle, Building2, Copy, Check } from "lucide-react";
-import { fetchOrderByNumber, cancelOrderWithRefund, cancelCardOrder, fetchSettings } from "@/lib/api";
+import { fetchOrderByNumber, cancelOrderWithRefund, cancelCardPayment, fetchSettings } from "@/lib/api";
 import { copyToClipboard } from "@/lib/clipboard";
 import { formatWon } from "@/lib/pricing";
 import { BRAND } from "@/config/brand";
@@ -97,7 +97,7 @@ export function GuestOrderPage({ onNavigate }: GuestOrderPageProps) {
     if (!order) return;
     setCancelling(true);
     try {
-      await cancelCardOrder(order.id, "고객 주문 취소 요청");
+      await cancelCardPayment(order.id, "고객 주문 취소 요청");
       setOrder({ ...order, status: "cancelled", card_cancel_reason: "고객 주문 취소 요청" });
       setShowCancelModal(false);
     } catch {
