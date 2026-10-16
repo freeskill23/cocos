@@ -112,9 +112,9 @@ export function ProductReviews({ productId }: ProductReviewsProps) {
             {review.image_urls && review.image_urls.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
                 {review.image_urls.map((url, idx) => (
-                  <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="block h-20 w-20 overflow-hidden rounded-xl border border-birch-200">
+                  <div key={idx} className="h-20 w-20 overflow-hidden rounded-xl border border-birch-200">
                     <img src={url} alt={`후기 사진 ${idx + 1}`} className="h-full w-full object-cover" />
-                  </a>
+                  </div>
                 ))}
               </div>
             )}
