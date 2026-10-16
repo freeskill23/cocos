@@ -12,18 +12,18 @@ Deno.serve(async (req: Request) => {
   try {
     const authorization = req.headers.get("Authorization");
     if (!authorization) {
-      return json({ error: "인증이 필요합니다." }, 401);
+      return ok({ success: false, error: "인증이 필요합니다." });
     }
 
     const { orderId, reason } = await req.json() as { orderId?: string; reason?: string };
     if (!orderId || !reason?.trim()) {
-      return json({ error: "취소 정보가 올바르지 않습니다." }, 400);
+      return ok({ success: false, error: "취소 정보가 올바르지 않습니다." });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!supabaseUrl || !serviceRoleKey) {
-      return json({ error: "서버 설정이 올바르지 않습니다." }, 500);
+      return ok({ success: false, error: "서버 설정이 올바르지 않습니다." });
     }
 
     const adminHeaders = {
@@ -37,7 +37,7 @@ Deno.serve(async (req: Request) => {
       { headers: adminHeaders },
     );
     if (!orderResponse.ok) {
-      return json({ error: "주문 정보를 확인하지 못했습니다." }, 500);
+      return ok({ success: false, error: "주문 정보를 확인하지 못했습니다." });
     }
     const orders = await orderResponse.json() as Array<{
       id: string;
@@ -47,10 +47,10 @@ Deno.serve(async (req: Request) => {
     }>;
     const order = orders[0];
     if (!order || order.payment_method !== "card" || !order.portone_payment_id) {
-      return json({ error: "취소할 카드 결제 정보를 찾을 수 없습니다." }, 400);
+      return ok({ success: false, error: "취소할 카드 결제 정보를 찾을 수 없습니다." });
     }
     if (!["paid", "payment_pending"].includes(order.status)) {
-      return json({ error: "현재 주문 상태에서는 취소할 수 없습니다." }, 400);
+      return ok({ success: false, error: "현재 주문 상태에서는 취소할 수 없습니다." });
     }
 
     // Fetch PortOne settings from DB
@@ -59,12 +59,12 @@ Deno.serve(async (req: Request) => {
       { headers: adminHeaders },
     );
     if (!settingsResponse.ok) {
-      return json({ error: "결제 설정을 불러오지 못했습니다." }, 500);
+      return ok({ success: false, error: "결제 설정을 불러오지 못했습니다." });
     }
     const settingsData = await settingsResponse.json() as Array<{ value: { storeId?: string; apiSecret?: string } }>;
     const portoneConfig = settingsData[0]?.value;
     if (!portoneConfig?.apiSecret || !portoneConfig?.storeId) {
-      return json({ error: "PortOne API 시크릿가 설정되지 않았습니다. 관리자 설정에서 등록해주세요." }, 503);
+      return ok({ success: false, error: "PortOne API 시크릿이 설정되지 않았습니다. 관리자 설정에서 등록해주세요." });
     }
 
     // Call PortOne V2 cancel API
@@ -85,7 +85,12 @@ Deno.serve(async (req: Request) => {
 
     if (!cancelResponse.ok) {
       const errBody = await cancelResponse.text().catch(() => "");
-      return json({ error: `결제 취소가 승인되지 않았습니다. (${cancelResponse.status}) ${errBody}` }, 502);
+      let portoneError = errBody;
+      try {
+        const parsed = JSON.parse(errBody);
+        portoneError = parsed.message || parsed.error?.message || errBody;
+      } catch { /* keep raw */ }
+      return ok({ success: false, error: `결제 취소 실패 (${cancelResponse.status}): ${portoneError}` });
     }
 
     // Update order status to cancelled
@@ -106,19 +111,19 @@ Deno.serve(async (req: Request) => {
       },
     );
     if (!updateResponse.ok) {
-      return json({ error: "결제는 취소됐지만 주문 상태 저장에 실패했습니다." }, 500);
+      return ok({ success: false, error: "결제는 취소됐지만 주문 상태 저장에 실패했습니다." });
     }
 
-    return json({ success: true });
+    return ok({ success: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "결제 취소 중 오류가 발생했습니다.";
-    return json({ error: msg }, 500);
+    return ok({ success: false, error: msg });
   }
 });
 
-function json(body: Record<string, unknown>, status = 200): Response {
+function ok(body: Record<string, unknown>): Response {
   return new Response(JSON.stringify(body), {
-    status,
+    status: 200,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
