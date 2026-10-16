@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { Plus, Trash2, Edit3, X, Loader2, Eye, EyeOff, Save, Star, ImagePlus } from "lucide-react";
-import { fetchAllReviews, upsertReview, deleteReview, uploadReviewImage, fetchAllProducts } from "@/lib/api";
+import { fetchAllReviews, upsertReview, deleteReview, uploadReviewImage, fetchAllProducts, maskAuthor } from "@/lib/api";
 import type { ReviewRow, ProductRow } from "@/types/database";
 
 export function ReviewsTab() {
@@ -218,7 +218,7 @@ function ReviewEditor({
       await upsertReview({
         id: item?.id,
         review,
-        author,
+        author: maskAuthor(author),
         is_visible: item?.is_visible ?? true,
         display_order: item?.display_order ?? 0,
         rating,
