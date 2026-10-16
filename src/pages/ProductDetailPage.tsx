@@ -7,6 +7,7 @@ import { DEFAULT_PRICING, DEFAULT_SIZES, type PricingSettings, type SizeSettings
 import { calculatePrice, formatWon } from "@/lib/pricing";
 import { parseDetailContent } from "@/components/admin/DetailEditor";
 import { SizePreview } from "@/components/SizePreview";
+import { ProductReviews } from "@/components/ProductReviews";
 
 interface ProductDetailPageProps {
   productId: string;
@@ -432,6 +433,8 @@ export function ProductDetailPage({ productId, onNavigate }: ProductDetailPagePr
                 </div>
               </div>
             )}
+
+            <ProductReviews productId={product.id} />
           </div>
         ) : null}
       </div>

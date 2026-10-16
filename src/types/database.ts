@@ -86,6 +86,9 @@ export interface OrderRow {
   refund_account_number: string | null;
   refund_account_holder: string | null;
   card_cancel_reason: string | null;
+  dog_name: string | null;
+  breed: string | null;
+  weight: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -114,6 +117,10 @@ export interface ReviewRow {
   display_order: number;
   is_visible: boolean;
   created_at: string;
+  rating: number;
+  product_id: string | null;
+  order_id: string | null;
+  image_urls: string[] | null;
 }
 
 export interface PricingSettings {

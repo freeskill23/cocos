@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Loader2, Mail, Lock, User } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { BRAND } from "@/config/brand";
@@ -14,6 +14,21 @@ export function AuthPage({ onNavigate }: AuthPageProps) {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saveId, setSaveId] = useState(false);
+  const [savePw, setSavePw] = useState(false);
+
+  useEffect(() => {
+    const savedId = localStorage.getItem("savedEmail");
+    if (savedId) {
+      setEmail(savedId);
+      setSaveId(true);
+    }
+    const savedPw = localStorage.getItem("savedPassword");
+    if (savedPw) {
+      setPassword(savedPw);
+      setSavePw(true);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,6 +42,16 @@ export function AuthPage({ onNavigate }: AuthPageProps) {
       if (result.error) {
         setError(result.error);
       } else {
+        if (saveId) {
+          localStorage.setItem("savedEmail", email.trim());
+        } else {
+          localStorage.removeItem("savedEmail");
+        }
+        if (savePw && mode === "login") {
+          localStorage.setItem("savedPassword", password);
+        } else {
+          localStorage.removeItem("savedPassword");
+        }
         onNavigate("/");
       }
     } finally {
@@ -90,6 +115,29 @@ export function AuthPage({ onNavigate }: AuthPageProps) {
                 />
               </div>
             </div>
+
+            {mode === "login" && (
+              <div className="flex items-center gap-5">
+                <label className="flex items-center gap-2 text-xs text-charcoal-muted cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={saveId}
+                    onChange={(e) => setSaveId(e.target.checked)}
+                    className="h-4 w-4 accent-birch-600"
+                  />
+                  아이디 저장
+                </label>
+                <label className="flex items-center gap-2 text-xs text-charcoal-muted cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={savePw}
+                    onChange={(e) => setSavePw(e.target.checked)}
+                    className="h-4 w-4 accent-birch-600"
+                  />
+                  비밀번호 저장
+                </label>
+              </div>
+            )}
 
             {error && (
               <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>

@@ -33,12 +33,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
+    if (!error) return { error: null };
+    const msg = error.message.toLowerCase();
+    if (msg.includes("invalid login credentials")) return { error: "이메일 또는 비밀번호가 올바르지 않습니다." };
+    if (msg.includes("email not confirmed")) return { error: "이메일 인증이 필요합니다." };
+    if (msg.includes("rate limit") || msg.includes("too many")) return { error: "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요." };
+    return { error: "로그인에 실패했습니다. 다시 시도해주세요." };
   };
 
   const signUp = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) return { error: error.message };
+    if (error) {
+      const msg = error.message.toLowerCase();
+      if (msg.includes("already registered") || msg.includes("already been registered")) return { error: "이미 가입된 이메일입니다." };
+      if (msg.includes("weak password") || msg.includes("password should be")) return { error: "비밀번호가 너무 간단합니다. 6자 이상으로 입력해주세요." };
+      return { error: "회원가입에 실패했습니다. 다시 시도해주세요." };
+    }
     if (data.user && !data.session) {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       if (signInError) return { error: "가입은 완료되었으나 자동 로그인에 실패했습니다. 다시 로그인해주세요." };

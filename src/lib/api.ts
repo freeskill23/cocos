@@ -213,6 +213,40 @@ export async function fetchAllReviews(): Promise<ReviewRow[]> {
   return data ?? [];
 }
 
+export async function fetchProductReviews(productId: string): Promise<ReviewRow[]> {
+  const { data, error } = await supabase
+    .from("reviews")
+    .select("*")
+    .eq("is_visible", true)
+    .eq("product_id", productId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function hasReviewForOrder(orderId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("reviews")
+    .select("id")
+    .eq("order_id", orderId)
+    .maybeSingle();
+  if (error) throw error;
+  return !!data;
+}
+
+export async function uploadReviewImage(file: File): Promise<string> {
+  const ext = file.name.split(".").pop() || "jpg";
+  const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const { error } = await supabase.storage
+    .from("review-images")
+    .upload(fileName, file, { contentType: file.type });
+  if (error) throw error;
+  const { data: urlData } = supabase.storage
+    .from("review-images")
+    .getPublicUrl(fileName);
+  return urlData.publicUrl;
+}
+
 export async function fetchAllOrders(): Promise<OrderRow[]> {
   const { data, error } = await supabase
     .from("orders")
@@ -465,6 +499,13 @@ export async function deletePortfolioItem(id: string): Promise<void> {
 export async function upsertReview(item: Partial<ReviewRow> & { dog_name: string; breed: string; weight: string; size: string; review: string; author: string }): Promise<void> {
   const { error } = await supabase.from("reviews").upsert(item);
   if (error) throw error;
+}
+
+export function maskAuthor(author: string): string {
+  if (!author) return author;
+  const trimmed = author.trim();
+  if (trimmed.length <= 4) return trimmed[0] + "*".repeat(Math.max(0, trimmed.length - 1));
+  return trimmed.slice(0, 4) + "*".repeat(trimmed.length - 4);
 }
 
 export async function deleteReview(id: string): Promise<void> {

@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { Search, Loader2, Package, XCircle, ArrowLeft, X, AlertCircle, Building2, Copy, Check } from "lucide-react";
-import { fetchOrderByNumber, cancelOrderWithRefund, cancelCardPayment, fetchSettings } from "@/lib/api";
+import { Search, Loader2, Package, XCircle, ArrowLeft, X, AlertCircle, Building2, Copy, Check, Star, PencilLine } from "lucide-react";
+import { fetchOrderByNumber, cancelOrderWithRefund, cancelCardPayment, fetchSettings, hasReviewForOrder } from "@/lib/api";
 import { copyToClipboard } from "@/lib/clipboard";
 import { formatWon } from "@/lib/pricing";
 import { BRAND } from "@/config/brand";
 import type { OrderRow, BankAccount } from "@/types/database";
+import { ReviewForm } from "@/components/ReviewForm";
 
 interface GuestOrderPageProps {
   onNavigate: (to: string) => void;
@@ -43,6 +44,9 @@ export function GuestOrderPage({ onNavigate }: GuestOrderPageProps) {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [alreadyReviewed, setAlreadyReviewed] = useState(false);
+  const [reviewSubmitted, setReviewSubmitted] = useState(false);
 
   useEffect(() => {
     fetchSettings().then((settings) => {
@@ -71,6 +75,13 @@ export function GuestOrderPage({ onNavigate }: GuestOrderPageProps) {
         setError("해당 주문번호를 찾을 수 없습니다. 주문번호를 확인해주세요.");
       } else {
         setOrder(result);
+        setReviewSubmitted(false);
+        if (["shipped", "completed"].includes(result.status)) {
+          const reviewed = await hasReviewForOrder(result.id).catch(() => false);
+          setAlreadyReviewed(reviewed);
+        } else {
+          setAlreadyReviewed(false);
+        }
       }
     } catch {
       setError("주문 조회 중 오류가 발생했습니다.");
@@ -109,6 +120,7 @@ export function GuestOrderPage({ onNavigate }: GuestOrderPageProps) {
 
   const cancellableStatuses = ["payment_pending", "paid"];
   const canCancel = order && cancellableStatuses.includes(order.status);
+  const canReview = order && ["shipped", "completed"].includes(order.status);
 
   return (
     <main className="min-h-screen bg-ivory pt-20 md:pt-24">
@@ -296,6 +308,23 @@ export function GuestOrderPage({ onNavigate }: GuestOrderPageProps) {
                   취소된 주문입니다.
                 </div>
               )}
+
+              {canReview && !alreadyReviewed && !reviewSubmitted && (
+                <button
+                  onClick={() => setShowReviewForm(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-full bg-charcoal py-3.5 text-sm font-medium text-ivory transition-all hover:bg-charcoal-light active:scale-[0.98]"
+                >
+                  <PencilLine size={16} />
+                  사용 후기 작성하기
+                </button>
+              )}
+
+              {canReview && (alreadyReviewed || reviewSubmitted) && (
+                <div className="flex items-center justify-center gap-2 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-700">
+                  <Check size={16} />
+                  후기가 등록되었습니다. 감사합니다.
+                </div>
+              )}
             </div>
           )}
 
@@ -307,6 +336,18 @@ export function GuestOrderPage({ onNavigate }: GuestOrderPageProps) {
           )}
         </div>
       </div>
+
+      {showReviewForm && order && (
+        <ReviewForm
+          order={order}
+          onSaved={() => {
+            setShowReviewForm(false);
+            setReviewSubmitted(true);
+            setAlreadyReviewed(true);
+          }}
+          onClose={() => setShowReviewForm(false)}
+        />
+      )}
 
       {showCancelModal && order && (
         <CancelModal
