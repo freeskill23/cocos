@@ -496,7 +496,7 @@ export async function deletePortfolioItem(id: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function upsertReview(item: Partial<ReviewRow> & { dog_name: string; breed: string; weight: string; size: string; review: string; author: string }): Promise<void> {
+export async function upsertReview(item: Partial<ReviewRow> & { review: string; author: string }): Promise<void> {
   const { error } = await supabase.from("reviews").upsert(item);
   if (error) throw error;
 }

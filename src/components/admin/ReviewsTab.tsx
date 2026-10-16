@@ -74,11 +74,13 @@ export function ReviewsTab() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="flex h-9 w-9 items-center justify-center rounded-full bg-birch-200 text-xs font-bold text-charcoal">
-                    {item.dog_name?.[0] ?? "?"}
+                    {item.author?.[0] ?? "?"}
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-charcoal">{item.dog_name}</p>
-                    <p className="text-[10px] text-charcoal-muted">{item.breed} · {item.weight}</p>
+                    <p className="text-sm font-semibold text-charcoal">{item.author}</p>
+                    <p className="text-[10px] text-charcoal-muted">
+                      {item.created_at ? new Date(item.created_at).toLocaleDateString("ko-KR") : ""}
+                    </p>
                   </div>
                 </div>
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${item.is_visible ? "bg-green-100 text-green-700" : "bg-gray-200 text-gray-500"}`}>
@@ -110,9 +112,7 @@ export function ReviewsTab() {
                 </div>
               )}
 
-              <p className="mt-2 font-mono text-[10px] text-charcoal-muted">{item.size}</p>
               <p className="mt-2 text-xs leading-relaxed text-charcoal-light line-clamp-3">"{item.review}"</p>
-              <p className="mt-2 text-[10px] text-charcoal-muted">{item.author}</p>
 
               <div className="mt-3 flex gap-2">
                 <button onClick={() => setEditing(item)} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-charcoal hover:bg-birch-100">
@@ -160,18 +160,12 @@ function ReviewEditor({
 }) {
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [productId, setProductId] = useState(item?.product_id ?? "");
-  const [dogName, setDogName] = useState(item?.dog_name ?? "");
-  const [breed, setBreed] = useState(item?.breed ?? "");
-  const [weight, setWeight] = useState(item?.weight ?? "");
-  const [size, setSize] = useState(item?.size ?? "");
   const [review, setReview] = useState(item?.review ?? "");
   const [author, setAuthor] = useState(item?.author ?? "");
   const [rating, setRating] = useState(item?.rating ?? 5);
   const [hoverRating, setHoverRating] = useState(0);
   const [imageUrls, setImageUrls] = useState<string[]>(item?.image_urls ?? []);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
-  const [order, setOrder] = useState(item?.display_order ?? 0);
-  const [visible, setVisible] = useState(item?.is_visible ?? true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -201,8 +195,8 @@ function ReviewEditor({
   };
 
   const handleSave = async () => {
-    if (!dogName || !breed || !weight || !size || !review || !author) {
-      setError("강아지 이름, 견종, 몸무게, 사이즈, 후기 내용, 작성자를 모두 입력해주세요.");
+    if (!review.trim() || !author.trim()) {
+      setError("작성자와 후기 내용을 입력해주세요.");
       return;
     }
     if (review.length > 200) {
@@ -220,14 +214,10 @@ function ReviewEditor({
       const allImages = [...imageUrls, ...uploadedUrls];
       await upsertReview({
         id: item?.id,
-        dog_name: dogName,
-        breed,
-        weight,
-        size,
         review,
         author,
-        display_order: order,
-        is_visible: visible,
+        is_visible: item?.is_visible ?? true,
+        display_order: item?.display_order ?? 0,
         rating,
         product_id: productId || null,
         order_id: item?.order_id ?? null,
@@ -264,21 +254,6 @@ function ReviewEditor({
               ))}
             </select>
           </FormField>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="강아지 이름">
-              <input value={dogName} onChange={(e) => setDogName(e.target.value)} className="input-field" placeholder="몽이" />
-            </FormField>
-            <FormField label="견종">
-              <input value={breed} onChange={(e) => setBreed(e.target.value)} className="input-field" placeholder="비숑" />
-            </FormField>
-            <FormField label="몸무게">
-              <input value={weight} onChange={(e) => setWeight(e.target.value)} className="input-field" placeholder="6.8kg" />
-            </FormField>
-            <FormField label="제작 사이즈">
-              <input value={size} onChange={(e) => setSize(e.target.value)} className="input-field" placeholder="720 × 520 × 580mm" />
-            </FormField>
-          </div>
 
           <FormField label="별점">
             <div className="flex gap-1">
@@ -355,18 +330,6 @@ function ReviewEditor({
               )}
             </div>
           </FormField>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="표시 순서">
-              <input type="number" value={order} onChange={(e) => setOrder(Number(e.target.value) || 0)} className="input-field" />
-            </FormField>
-            <FormField label="공개 여부">
-              <button onClick={() => setVisible(!visible)} className={`flex w-full items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 text-sm font-medium transition-all ${visible ? "border-charcoal bg-birch-50 text-charcoal" : "border-birch-200 text-charcoal-muted"}`}>
-                {visible ? <Eye size={16} /> : <EyeOff size={16} />}
-                {visible ? "공개" : "숨김"}
-              </button>
-            </FormField>
-          </div>
 
           {error && <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 

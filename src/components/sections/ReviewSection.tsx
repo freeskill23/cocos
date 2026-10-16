@@ -82,15 +82,15 @@ export function ReviewSection() {
 
                 <div className="mt-4 flex items-center gap-3">
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-birch-200 text-sm font-bold text-charcoal">
-                    {review.dog_name?.[0] ?? "?"}
+                    {review.author?.[0] ?? "?"}
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-charcoal">{review.dog_name}</p>
-                    <p className="text-xs text-charcoal-muted">{review.breed} · {review.weight}</p>
+                    <p className="text-sm font-semibold text-charcoal">{review.author}</p>
+                    <p className="text-xs text-charcoal-muted">
+                      {review.created_at ? new Date(review.created_at).toLocaleDateString("ko-KR") : ""}
+                    </p>
                   </div>
                 </div>
-
-                <p className="mt-4 font-mono text-xs font-medium text-charcoal-light">{review.size}</p>
 
                 <p className="mt-4 flex-1 text-sm leading-relaxed text-charcoal-light">
                   "{review.review}"

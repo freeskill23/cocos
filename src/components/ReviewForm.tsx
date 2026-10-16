@@ -58,13 +58,8 @@ export function ReviewForm({ order, onSaved, onClose }: ReviewFormProps) {
       }
       const allImages = [...images, ...uploadedUrls];
       await upsertReview({
-        dog_name: order.dog_name ?? "고객",
-        breed: order.breed ?? "",
-        weight: order.weight ?? "",
-        size: `${order.width} × ${order.depth} × ${order.height}mm`,
         review: review.trim(),
         author: maskAuthor(order.customer_name),
-        display_order: 0,
         is_visible: true,
         rating,
         product_id: order.product_id,

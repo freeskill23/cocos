@@ -86,32 +86,28 @@ export function ProductReviews({ productId }: ProductReviewsProps) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-birch-200 text-sm font-bold text-charcoal">
-                  {review.dog_name?.[0] ?? "?"}
+                  {review.author?.[0] ?? "?"}
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-charcoal">{review.dog_name}</p>
-                  <p className="text-xs text-charcoal-muted">{review.breed} · {review.weight}</p>
+                  <p className="text-sm font-semibold text-charcoal">{review.author}</p>
+                  <p className="text-xs text-charcoal-muted">
+                    {review.created_at ? new Date(review.created_at).toLocaleDateString("ko-KR") : ""}
+                  </p>
                 </div>
               </div>
-              <div className="flex flex-col items-end gap-1">
-                <div className="flex gap-0.5">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Star
-                      key={i}
-                      size={14}
-                      className={i < review.rating ? "text-birch-500" : "text-birch-200"}
-                      fill={i < review.rating ? "currentColor" : "none"}
-                    />
-                  ))}
-                </div>
-                <p className="text-[10px] text-charcoal-muted">
-                  {review.created_at ? new Date(review.created_at).toLocaleDateString("ko-KR") : ""}
-                </p>
+              <div className="flex gap-0.5">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Star
+                    key={i}
+                    size={14}
+                    className={i < review.rating ? "text-birch-500" : "text-birch-200"}
+                    fill={i < review.rating ? "currentColor" : "none"}
+                  />
+                ))}
               </div>
             </div>
 
-            <p className="mt-3 font-mono text-xs text-charcoal-light">{review.size}</p>
-            <p className="mt-2 text-sm leading-relaxed text-charcoal-light">{review.review}</p>
+            <p className="mt-3 text-sm leading-relaxed text-charcoal-light">{review.review}</p>
 
             {review.image_urls && review.image_urls.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
@@ -122,8 +118,6 @@ export function ProductReviews({ productId }: ProductReviewsProps) {
                 ))}
               </div>
             )}
-
-            <p className="mt-3 border-t border-birch-100 pt-3 text-xs text-charcoal-muted">{review.author}</p>
           </article>
         ))}
       </div>
