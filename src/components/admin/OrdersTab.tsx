@@ -408,7 +408,18 @@ function OrderCard({
               </p>
             </div>
           </div>
-          {expanded ? <ChevronUp size={18} className="text-charcoal-muted" /> : <ChevronDown size={18} className="text-charcoal-muted" />}
+          <div className="flex items-center gap-2">
+            {order.payment_method === "card" && (status === "payment_pending" || status === "paid") && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onCardCancel(order.id); }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
+              >
+                <XCircle size={14} />
+                카드 결제 취소
+              </button>
+            )}
+            {expanded ? <ChevronUp size={18} className="text-charcoal-muted" /> : <ChevronDown size={18} className="text-charcoal-muted" />}
+          </div>
         </button>
       </div>
 
