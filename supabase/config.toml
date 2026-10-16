@@ -1,2 +1,5 @@
 [functions.analytics-collect]
 verify_jwt = false
+
+[functions.cancel-portone-payment]
+verify_jwt = true
