@@ -162,6 +162,7 @@ export interface BankAccount {
 export interface PortOneConfig {
   storeId: string;
   channelKey: string;
+  apiSecret: string;
 }
 
 export interface SettingsMap {

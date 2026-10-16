@@ -9,7 +9,7 @@ export function SettingsTab() {
   const [pricing, setPricing] = useState<PricingSettings>(DEFAULT_PRICING);
   const [sizes, setSizes] = useState<SizeSettings>(DEFAULT_SIZES);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
-  const [portone, setPortone] = useState<PortOneConfig>({ storeId: "", channelKey: "" });
+  const [portone, setPortone] = useState<PortOneConfig>({ storeId: "", channelKey: "", apiSecret: "" });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -202,6 +202,19 @@ export function SettingsTab() {
             />
             <p className="mt-1.5 text-xs text-charcoal-muted">
               포트원 콘솔 &gt; 연동 관리 &gt; 연동 정보 &gt; 채널 관리에서 확인.
+            </p>
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-charcoal">API Secret (포트원 API 시크릿)</label>
+            <input
+              type="password"
+              value={portone.apiSecret}
+              onChange={(e) => setPortone({ ...portone, apiSecret: e.target.value })}
+              placeholder="포트원 API 시크릿"
+              className="input-field"
+            />
+            <p className="mt-1.5 text-xs text-charcoal-muted">
+              포트원 콘솔 &gt; 내 상점 &gt; API 시크릿에서 확인. 카드 결제 취소에 필요합니다.
             </p>
           </div>
           <div className="rounded-xl bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-800">

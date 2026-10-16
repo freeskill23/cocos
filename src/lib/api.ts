@@ -446,7 +446,10 @@ export async function cancelCardPayment(id: string, reason: string): Promise<voi
   const { data, error } = await supabase.functions.invoke("cancel-portone-payment", {
     body: { orderId: id, reason },
   });
-  if (error || !data?.success) throw new Error("결제 취소에 실패했습니다.");
+  if (error || !data?.success) {
+    const msg = data?.error || (error instanceof Error ? error.message : "결제 취소에 실패했습니다.");
+    throw new Error(msg);
+  }
 }
 
 export async function upsertPortfolioItem(item: Partial<PortfolioRow> & { dog_name: string; breed: string; weight: string; size: string; note: string }): Promise<void> {
