@@ -35,31 +35,50 @@ export function AdminDashboard({ onNavigate, path }: AdminDashboardProps) {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    if (!session) return;
-    void (async () => {
-      const { data } = await supabase
-        .from("admin_users")
-        .select("id")
-        .eq("id", session.user.id)
-        .maybeSingle();
-      if (data === null) {
-        await signOut();
-        onNavigate("/admin/login");
-      } else {
-        setIsAdmin(true);
-      }
+    if (!session) {
       setAdminChecked(true);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("admin_users")
+          .select("id")
+          .eq("id", session.user.id)
+          .maybeSingle();
+        if (cancelled) return;
+        if (error) {
+          console.error("admin check error", error);
+          await signOut();
+          onNavigate("/admin/login");
+          return;
+        }
+        if (data === null) {
+          await signOut();
+          onNavigate("/admin/login");
+        } else {
+          setIsAdmin(true);
+        }
+      } catch (err) {
+        console.error("admin check exception", err);
+      } finally {
+        if (!cancelled) setAdminChecked(true);
+      }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [session, onNavigate, signOut]);
 
-  if (!adminChecked) {
+  if (!adminChecked || !isAdmin) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-birch-50">
         <Loader2 size={28} className="animate-spin text-birch-400" />
       </div>
     );
   }
-  if (!isAdmin) return null;
+
 
   const handleSignOut = async () => {
     await signOut();
