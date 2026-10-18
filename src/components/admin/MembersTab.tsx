@@ -49,11 +49,6 @@ export function MembersTab() {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: fnError } = await supabase.functions.invoke("admin-users", {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
-      if (fnError) throw fnError;
       const path = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-users/list`;
       const res = await fetch(path, {
         method: "GET",
@@ -62,7 +57,10 @@ export function MembersTab() {
           "Content-Type": "application/json",
         },
       });
-      if (!res.ok) throw new Error("회원 목록을 불러오지 못했습니다.");
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error ?? "회원 목록을 불러오지 못했습니다.");
+      }
       const json = await res.json();
       setUsers(json.users ?? []);
     } catch (err) {
