@@ -48,20 +48,14 @@ export function AdminDashboard({ onNavigate, path }: AdminDashboardProps) {
           .eq("id", session.user.id)
           .maybeSingle();
         if (cancelled) return;
-        if (error) {
-          console.error("admin check error", error);
-          await signOut();
-          onNavigate("/admin/login");
-          return;
-        }
-        if (data === null) {
+        if (error || data === null) {
           await signOut();
           onNavigate("/admin/login");
         } else {
           setIsAdmin(true);
         }
-      } catch (err) {
-        console.error("admin check exception", err);
+      } catch {
+        // ignore — leave on loader
       } finally {
         if (!cancelled) setAdminChecked(true);
       }
@@ -69,7 +63,8 @@ export function AdminDashboard({ onNavigate, path }: AdminDashboardProps) {
     return () => {
       cancelled = true;
     };
-  }, [session, onNavigate, signOut]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
 
   if (!adminChecked || !isAdmin) {
     return (
