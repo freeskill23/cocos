@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { BarChart3, CalendarDays, Globe2, Loader2, RefreshCw, Search, Users, MousePointerClick, ShoppingBag } from "lucide-react";
 import { fetchAnalyticsVisits, type AnalyticsVisit } from "@/lib/analytics";
 
-const DAY_OPTIONS = [7, 30, 90] as const;
+const DAY_OPTIONS = [1, 7, 30, 90] as const;
 
 type DayRange = (typeof DAY_OPTIONS)[number];
 
@@ -29,18 +29,29 @@ function groupRows(rows: AnalyticsVisit[], getLabel: (row: AnalyticsVisit) => st
 }
 
 export function AnalyticsTab() {
-  const [days, setDays] = useState<DayRange>(30);
+  const [days, setDays] = useState<DayRange>(7);
+  const [dateMode, setDateMode] = useState<"range" | "today" | "yesterday">("range");
   const [rows, setRows] = useState<AnalyticsVisit[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
-  const load = useCallback(async (range: DayRange, isRefresh = false) => {
+  const load = useCallback(async (range: DayRange, mode: "range" | "today" | "yesterday", isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     setError(null);
-    const until = new Date();
-    const since = new Date(until.getTime() - range * 24 * 60 * 60 * 1000);
+    let since: Date;
+    let until: Date;
+    if (mode === "today") {
+      since = new Date(); since.setHours(0, 0, 0, 0);
+      until = new Date(); until.setHours(23, 59, 59, 999);
+    } else if (mode === "yesterday") {
+      since = new Date(); since.setDate(since.getDate() - 1); since.setHours(0, 0, 0, 0);
+      until = new Date(); until.setDate(until.getDate() - 1); until.setHours(23, 59, 59, 999);
+    } else {
+      until = new Date();
+      since = new Date(until.getTime() - range * 24 * 60 * 60 * 1000);
+    }
     try {
       setRows(await fetchAnalyticsVisits(since.toISOString(), until.toISOString()));
     } catch {
@@ -51,7 +62,7 @@ export function AnalyticsTab() {
     }
   }, []);
 
-  useEffect(() => { void load(days); }, [days, load]);
+  useEffect(() => { void load(days, dateMode); }, [days, dateMode, load]);
 
   const filteredRows = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -69,6 +80,15 @@ export function AnalyticsTab() {
 
   const keywords = useMemo(() => groupRows(filteredRows, (row) => row.naver_keyword ?? row.utm_term ?? ""), [filteredRows]);
   const campaigns = useMemo(() => groupRows(filteredRows, (row) => row.utm_campaign ?? row.naver_campaign ?? ""), [filteredRows]);
+  const referrers = useMemo(() => groupRows(filteredRows, (row) => {
+    if (!row.referrer) return "직접 유입";
+    try {
+      const host = new URL(row.referrer).hostname.replace(/^www\./, "");
+      return host;
+    } catch {
+      return row.referrer;
+    }
+  }), [filteredRows]);
   const ips = useMemo(() => groupRows(filteredRows, (row) => row.ip_address ?? "IP 확인 불가"), [filteredRows]);
 
   return (
@@ -81,15 +101,18 @@ export function AnalyticsTab() {
           </div>
           <p className="mt-2 text-sm text-charcoal-muted">네이버 광고 유입부터 반복 방문과 주문 전환까지 확인합니다.</p>
         </div>
-        <button onClick={() => void load(days, true)} disabled={refreshing} className="btn-outline self-start text-sm">
+        <button onClick={() => void load(days, dateMode, true)} disabled={refreshing} className="btn-outline self-start text-sm">
           <RefreshCw size={15} className={refreshing ? "animate-spin" : ""} /> 새로고침
         </button>
       </div>
 
       <div className="mt-8 flex flex-col gap-3 rounded-2xl border border-birch-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 text-sm font-medium text-charcoal"><CalendarDays size={16} className="text-birch-500" /> 분석 기간</div>
-        <div className="flex gap-2">
-          {DAY_OPTIONS.map((option) => <button key={option} onClick={() => setDays(option)} className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${days === option ? "bg-charcoal text-white" : "bg-birch-50 text-charcoal-muted hover:bg-birch-100"}`}>{option}일</button>)}
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setDateMode("today")} className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${dateMode === "today" ? "bg-charcoal text-white" : "bg-birch-50 text-charcoal-muted hover:bg-birch-100"}`}>오늘</button>
+          <button onClick={() => setDateMode("yesterday")} className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${dateMode === "yesterday" ? "bg-charcoal text-white" : "bg-birch-50 text-charcoal-muted hover:bg-birch-100"}`}>어제</button>
+          <div className="mx-1 w-px self-stretch bg-birch-200" />
+          {DAY_OPTIONS.map((option) => <button key={option} onClick={() => { setDays(option); setDateMode("range"); }} className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${dateMode === "range" && days === option ? "bg-charcoal text-white" : "bg-birch-50 text-charcoal-muted hover:bg-birch-100"}`}>{option}일</button>)}
         </div>
       </div>
 
@@ -106,10 +129,14 @@ export function AnalyticsTab() {
 
           <div className="mt-6 rounded-3xl border border-birch-200 bg-white p-5 sm:p-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div><h2 className="text-base font-semibold text-charcoal">유입 키워드</h2><p className="mt-1 text-xs text-charcoal-muted">네이버 PowerLink의 n_keyword와 UTM term을 함께 집계합니다.</p></div>
+              <div><h2 className="text-base font-semibold text-charcoal">유입 검색</h2><p className="mt-1 text-xs text-charcoal-muted">IP, 키워드, 캠페인, 출처를 검색할 수 있습니다.</p></div>
               <div className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-charcoal-muted" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="IP, 키워드, 캠페인 검색" className="input-field w-full pl-9 text-xs sm:w-64" /></div>
             </div>
-            <RankingTable rows={keywords} empty="아직 기록된 키워드가 없습니다." />
+          </div>
+
+          <div className="mt-6 grid gap-6 xl:grid-cols-2">
+            <RankingCard title="유입 키워드" rows={keywords} />
+            <RankingCard title="유입 출처 (Referrer)" rows={referrers} />
           </div>
 
           <div className="mt-6 grid gap-6 xl:grid-cols-2">
