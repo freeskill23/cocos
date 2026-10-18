@@ -24,7 +24,9 @@ Deno.serve(async (req: Request) => {
   }
 
   const url = new URL(req.url);
-  const path = url.pathname.replace(/^\/admin-users/, "") || "/";
+  const fullPath = url.pathname;
+  const fnIndex = fullPath.indexOf("/admin-users");
+  const path = fnIndex >= 0 ? fullPath.slice(fnIndex + "/admin-users".length) : "/";
 
   try {
     // Verify caller is authenticated admin
