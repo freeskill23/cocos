@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Lock, Loader2, AlertCircle, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
 import { BRAND } from "@/config/brand";
 
 interface AdminLoginProps {
@@ -8,14 +9,33 @@ interface AdminLoginProps {
 }
 
 export function AdminLogin({ onNavigate }: AdminLoginProps) {
-  const { signIn, session } = useAuth();
+  const { signIn, signOut, session } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const verifyAdmin = async (userId: string): Promise<boolean> => {
+    const { data } = await supabase
+      .from("admin_users")
+      .select("id")
+      .eq("id", userId)
+      .maybeSingle();
+    return data !== null;
+  };
+
   useEffect(() => {
-    if (session) onNavigate("/admin");
+    if (!session) return;
+    void (async () => {
+      const isAdmin = await verifyAdmin(session.user.id);
+      if (isAdmin) {
+        onNavigate("/admin");
+      } else {
+        await signOut();
+        setError("관리자 권한이 없는 계정입니다.");
+        setLoading(false);
+      }
+    })();
   }, [session, onNavigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {

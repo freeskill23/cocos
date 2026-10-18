@@ -31,6 +31,35 @@ export function AdminDashboard({ onNavigate, path }: AdminDashboardProps) {
   const [tab, setTab] = useState<TabId>(() => tabFromPath(path));
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [orderCount, setOrderCount] = useState<number | null>(null);
+  const [adminChecked, setAdminChecked] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    if (!session) return;
+    void (async () => {
+      const { data } = await supabase
+        .from("admin_users")
+        .select("id")
+        .eq("id", session.user.id)
+        .maybeSingle();
+      if (data === null) {
+        await signOut();
+        onNavigate("/admin/login");
+      } else {
+        setIsAdmin(true);
+      }
+      setAdminChecked(true);
+    })();
+  }, [session, onNavigate, signOut]);
+
+  if (!adminChecked) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-birch-50">
+        <Loader2 size={28} className="animate-spin text-birch-400" />
+      </div>
+    );
+  }
+  if (!isAdmin) return null;
 
   const handleSignOut = async () => {
     await signOut();
