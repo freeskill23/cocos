@@ -17,6 +17,7 @@ import { CheckoutPage } from "@/pages/CheckoutPage";
 import { GuestOrderPage } from "@/pages/GuestOrderPage";
 import { AdminLogin } from "@/pages/AdminLogin";
 import { AdminDashboard } from "@/pages/AdminDashboard";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BusinessInfoPage, PrivacyPage, RefundPolicyPage } from "@/pages/LegalPages";
 import { Loader2 } from "lucide-react";
 import { trackVisit } from "@/lib/analytics";
@@ -46,11 +47,19 @@ function AppRoutes() {
   }
 
   if (isAdmin && session) {
-    return <AdminDashboard onNavigate={navigate} path={path} />;
+    return (
+      <ErrorBoundary>
+        <AdminDashboard onNavigate={navigate} path={path} />
+      </ErrorBoundary>
+    );
   }
 
   if (isAdminLogin && session) {
-    return <AdminDashboard onNavigate={navigate} path={path} />;
+    return (
+      <ErrorBoundary>
+        <AdminDashboard onNavigate={navigate} path={path} />
+      </ErrorBoundary>
+    );
   }
 
   // /pay/card/:merchantId → card payment result page

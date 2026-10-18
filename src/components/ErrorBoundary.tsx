@@ -1,46 +1,39 @@
-import { Component, type ReactNode } from 'react';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { Component, type ReactNode } from "react";
 
 interface Props {
   children: ReactNode;
+  fallback?: (error: Error, reset: () => void) => ReactNode;
 }
+
 interface State {
-  hasError: boolean;
-  message: string;
+  error: Error | null;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false, message: '' };
+  state: State = { error: null };
 
-  static getDerivedStateFromError(err: unknown): State {
-    const message = err instanceof Error ? err.message : String(err);
-    return { hasError: true, message };
+  static getDerivedStateFromError(error: Error): State {
+    return { error };
   }
 
-  handleReload = () => {
-    window.location.reload();
-  };
+  componentDidCatch(error: Error, info: { componentStack: string }) {
+    console.error("ErrorBoundary caught:", error, info);
+  }
+
+  reset = () => this.setState({ error: null });
 
   render() {
-    if (this.state.hasError) {
+    if (this.state.error) {
+      if (this.props.fallback) return this.props.fallback(this.state.error, this.reset);
       return (
-        <div className="min-h-screen flex items-center justify-center bg-navy-950 px-4">
-          <div className="max-w-sm w-full rounded-2xl bg-white p-6 shadow-2xl text-center">
-            <div className="mx-auto w-14 h-14 rounded-full bg-rose-100 flex items-center justify-center mb-4">
-              <AlertTriangle size={28} className="text-rose-500" />
-            </div>
-            <h1 className="text-lg font-extrabold text-navy-900 mb-2">
-              문제가 발생했습니다
-            </h1>
-            <p className="text-sm text-slate-500 mb-5 break-words">
-              {this.state.message || '알 수 없는 오류가 발생했습니다.'}
-            </p>
-            <button
-              onClick={this.handleReload}
-              className="w-full py-3 rounded-xl bg-volt-500 text-navy-950 font-bold hover:bg-volt-400 active:scale-[0.98] transition flex items-center justify-center gap-2"
-            >
-              <RefreshCw size={18} /> 새로고침
-            </button>
+        <div className="flex min-h-screen items-center justify-center bg-birch-50 px-6">
+          <div className="max-w-lg rounded-3xl border border-red-200 bg-white p-8 text-center">
+            <h1 className="font-serif text-xl text-charcoal">페이지를 표시하는 중 오류가 발생했습니다</h1>
+            <p className="mt-3 text-sm text-red-600">{this.state.error.message}</p>
+            <pre className="mt-4 max-h-48 overflow-auto rounded-xl bg-red-50 p-3 text-left text-xs text-red-700">
+              {this.state.error.stack}
+            </pre>
+            <button onClick={this.reset} className="btn-outline mt-6 text-sm">다시 시도</button>
           </div>
         </div>
       );
