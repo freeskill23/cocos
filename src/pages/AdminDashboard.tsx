@@ -33,6 +33,7 @@ export function AdminDashboard({ onNavigate, path }: AdminDashboardProps) {
   const [orderCount, setOrderCount] = useState<number | null>(null);
   const [adminChecked, setAdminChecked] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [adminError, setAdminError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!session) {
@@ -40,6 +41,12 @@ export function AdminDashboard({ onNavigate, path }: AdminDashboardProps) {
       return;
     }
     let cancelled = false;
+    const timer = setTimeout(() => {
+      if (!cancelled && !adminChecked) {
+        setAdminError("관리자 권한 확인 시간이 초과되었습니다.");
+        setAdminChecked(true);
+      }
+    }, 8000);
     void (async () => {
       try {
         const { data, error } = await supabase
@@ -48,25 +55,35 @@ export function AdminDashboard({ onNavigate, path }: AdminDashboardProps) {
           .eq("id", session.user.id)
           .maybeSingle();
         if (cancelled) return;
-        if (error || data === null) {
-          await signOut();
-          onNavigate("/admin/login");
+        if (error) {
+          setAdminError(`권한 확인 실패: ${error.message}`);
+        } else if (data === null) {
+          setAdminError("이 계정은 관리자로 등록되어 있지 않습니다.");
         } else {
           setIsAdmin(true);
         }
-      } catch {
-        // ignore — leave on loader
+      } catch (err) {
+        if (!cancelled) setAdminError(`오류: ${String(err)}`);
       } finally {
-        if (!cancelled) setAdminChecked(true);
+        if (!cancelled) {
+          clearTimeout(timer);
+          setAdminChecked(true);
+        }
       }
     })();
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
-  if (!adminChecked || !isAdmin) {
+  const handleSignOut = useCallback(async () => {
+    await signOut();
+    onNavigate("/");
+  }, [signOut, onNavigate]);
+
+  if (!adminChecked) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-birch-50">
         <Loader2 size={28} className="animate-spin text-birch-400" />
@@ -74,11 +91,23 @@ export function AdminDashboard({ onNavigate, path }: AdminDashboardProps) {
     );
   }
 
+  if (!isAdmin) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-birch-50 px-6">
+        <div className="max-w-md text-center">
+          <p className="font-serif text-xl text-charcoal">{adminError || "접근 권한이 없습니다."}</p>
+          <p className="mt-2 text-sm text-charcoal-muted">로그인된 계정: {session?.user?.email}</p>
+          <button
+            onClick={handleSignOut}
+            className="btn-outline mt-6 text-sm"
+          >
+            로그아웃
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-  const handleSignOut = async () => {
-    await signOut();
-    onNavigate("/");
-  };
 
   const navItems: { id: TabId; label: string; icon: typeof LayoutDashboard }[] = [
     { id: "dashboard", label: "대시보드", icon: LayoutDashboard },
