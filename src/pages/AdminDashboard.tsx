@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { LogOut, LayoutDashboard, Package, Boxes, Images, Star, Settings, Menu, X, Tag, BarChart3, Users } from "lucide-react";
+import { LogOut, LayoutDashboard, Package, Boxes, Images, Star, Settings, Menu, X, Tag, BarChart3, Users, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { BRAND } from "@/config/brand";
