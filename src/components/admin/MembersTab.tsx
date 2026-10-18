@@ -32,6 +32,11 @@ function formatDate(value: string | null): string {
   return new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "short", day: "numeric" }).format(new Date(value));
 }
 
+async function getAuthToken(): Promise<string> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? "";
+}
+
 export function MembersTab() {
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,11 +54,12 @@ export function MembersTab() {
     setLoading(true);
     setError(null);
     try {
+      const token = await getAuthToken();
       const path = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-users/list`;
       const res = await fetch(path, {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${supabase.auth.session()?.access_token ?? ""}`,
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
       });
@@ -79,11 +85,12 @@ export function MembersTab() {
     setDetail(null);
     setDetailLoading(true);
     try {
+      const token = await getAuthToken();
       const path = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-users/${user.id}/detail`;
       const res = await fetch(path, {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${supabase.auth.session()?.access_token ?? ""}`,
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
       });
@@ -102,11 +109,12 @@ export function MembersTab() {
     setResetting(true);
     setResetResult(null);
     try {
+      const token = await getAuthToken();
       const path = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-users/${resetModal.id}/reset-password`;
       const res = await fetch(path, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${supabase.auth.session()?.access_token ?? ""}`,
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ password: newPassword }),
