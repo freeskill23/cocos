@@ -3,3 +3,6 @@ verify_jwt = false
 
 [functions.cancel-portone-payment]
 verify_jwt = true
+
+[functions.admin-users]
+verify_jwt = true

@@ -1,5 +1,4 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,162 +6,129 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const supabase = createClient(
+  Deno.env.get("SUPABASE_URL") ?? "",
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+);
 
-const admin = createClient(supabaseUrl, serviceRoleKey, {
-  auth: { autoRefreshToken: false, persistSession: false },
-});
+interface AdminUser {
+  id: string;
+  email: string;
+  created_at: string;
+  last_sign_in_at: string | null;
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
+  const url = new URL(req.url);
+  const path = url.pathname.replace(/^\/admin-users/, "") || "/";
+
   try {
-    const url = new URL(req.url);
-    const action = url.searchParams.get("action");
+    // Verify caller is authenticated admin
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return jsonResponse(401, { error: "인증이 필요합니다." });
+    }
+    const token = authHeader.replace("Bearer ", "");
+    const { data: userData, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !userData.user) {
+      return jsonResponse(401, { error: "유효하지 않은 토큰입니다." });
+    }
 
-    // GET ?action=list — return all profiles with reservation/matching counts
-    if (req.method === "GET" && action === "list") {
-      const { data, error } = await admin
-        .from("profiles")
-        .select("id, email, name, nickname, phone, career, ntrp, hand, game_preference, bio, profile_img, is_bad_member, bad_member_reason, marketing_consent, created_at, login_count, referral_source")
-        .order("login_count", { ascending: false })
-        .order("created_at", { ascending: false });
-      if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+    // Check admin role via user_in_roles or app_metadata
+    const userId = userData.user.id;
+    const { data: roleData } = await supabase
+      .from("admin_users")
+      .select("id")
+      .eq("id", userId)
+      .maybeSingle();
 
-      // Count court reservations per user
-      const { data: courtRows } = await admin
-        .from("reservations")
-        .select("user_id")
-        .eq("type", "court");
-      const courtCounts: Record<string, number> = {};
-      for (const r of courtRows || []) {
-        courtCounts[r.user_id] = (courtCounts[r.user_id] || 0) + 1;
-      }
+    const isAdmin = roleData !== null || userData.user.app_metadata?.role === "admin";
+    if (!isAdmin) {
+      return jsonResponse(403, { error: "관리자 권한이 필요합니다." });
+    }
 
-      // Count pension reservations per user
-      const { data: pensionRows } = await admin
-        .from("reservations")
-        .select("user_id")
-        .eq("type", "pension");
-      const pensionCounts: Record<string, number> = {};
-      for (const r of pensionRows || []) {
-        pensionCounts[r.user_id] = (pensionCounts[r.user_id] || 0) + 1;
-      }
-
-      // Count matching posts per user
-      const { data: matchRows } = await admin
-        .from("matching_posts")
-        .select("user_id");
-      const matchCounts: Record<string, number> = {};
-      for (const r of matchRows || []) {
-        matchCounts[r.user_id] = (matchCounts[r.user_id] || 0) + 1;
-      }
-
-      const users = (data || []).map((u: Record<string, unknown>) => ({
-        ...u,
-        court_count: courtCounts[u.id as string] || 0,
-        pension_count: pensionCounts[u.id as string] || 0,
-        matching_count: matchCounts[u.id as string] || 0,
+    // GET /admin-users/list — list all users
+    if (path === "/list" && req.method === "GET") {
+      const { data, error } = await supabase.auth.admin.listUsers({
+        page: 1,
+        perPage: 1000,
+      });
+      if (error) throw error;
+      const users: AdminUser[] = (data.users ?? []).map((u) => ({
+        id: u.id,
+        email: u.email ?? "",
+        created_at: u.created_at,
+        last_sign_in_at: u.last_sign_in_at,
       }));
-
-      return new Response(JSON.stringify({ users }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse(200, { users });
     }
 
-    // POST ?action=change_password — admin resets a user's password
-    if (req.method === "POST" && action === "change_password") {
-      const { userId, newPassword } = await req.json();
-      if (!userId || !newPassword || newPassword.length < 6) {
-        return new Response(
-          JSON.stringify({ error: "userId and newPassword (min 6 chars) required" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    // GET /admin-users/:id/detail — get user orders + cart
+    const detailMatch = path.match(/^\/([^/]+)\/detail$/);
+    if (detailMatch && req.method === "GET") {
+      const targetUserId = detailMatch[1];
+      // Get user email to match orders by customer_email
+      const { data: targetUser } = await supabase.auth.admin.getUserById(targetUserId);
+      const targetEmail = targetUser?.user?.email ?? null;
+
+      const queries: Promise<unknown>[] = [
+        supabase
+          .from("cart_items")
+          .select("*")
+          .eq("user_id", targetUserId)
+          .order("created_at", { ascending: false })
+          .limit(50)
+          .then((r) => r.data ?? []),
+      ];
+
+      if (targetEmail) {
+        queries.unshift(
+          supabase
+            .from("orders")
+            .select("*")
+            .eq("customer_email", targetEmail)
+            .order("created_at", { ascending: false })
+            .limit(50)
+            .then((r) => r.data ?? [])
         );
+      } else {
+        queries.unshift(Promise.resolve([]));
       }
-      const { error } = await admin.auth.admin.updateUserById(userId, { password: newPassword });
-      if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+
+      const [orders, cartItems] = await Promise.all(queries);
+      return jsonResponse(200, { orders, cartItems });
     }
 
-    // POST ?action=set_bad_member — toggle bad member flag + reason
-    if (req.method === "POST" && action === "set_bad_member") {
-      const { userId, isBad, reason } = await req.json();
-      if (!userId) {
-        return new Response(JSON.stringify({ error: "userId required" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+    // POST /admin-users/:id/reset-password — update password
+    const resetMatch = path.match(/^\/([^/]+)\/reset-password$/);
+    if (resetMatch && req.method === "POST") {
+      const targetUserId = resetMatch[1];
+      const body = await req.json();
+      const newPassword = body?.password;
+      if (typeof newPassword !== "string" || newPassword.length < 6) {
+        return jsonResponse(400, { error: "비밀번호는 6자 이상이어야 합니다." });
       }
-      const { error } = await admin
-        .from("profiles")
-        .update({
-          is_bad_member: !!isBad,
-          bad_member_reason: isBad ? (reason || "") : null,
-        })
-        .eq("id", userId);
-      if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      const { error } = await supabase.auth.admin.updateUserById(targetUserId, {
+        password: newPassword,
       });
+      if (error) throw error;
+      return jsonResponse(200, { ok: true });
     }
 
-    // POST ?action=delete_user — permanently delete a user and their data
-    if (req.method === "POST" && action === "delete_user") {
-      const { userId } = await req.json();
-      if (!userId) {
-        return new Response(JSON.stringify({ error: "userId required" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+    return jsonResponse(404, { error: "지원하지 않는 요청입니다." });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "요청 처리 중 오류가 발생했습니다.";
+    return jsonResponse(500, { error: msg });
+  }
 
-      // Delete user's reservations
-      await admin.from("reservations").delete().eq("user_id", userId);
-      // Delete user's matching posts
-      await admin.from("matching_posts").delete().eq("user_id", userId);
-      // Delete profile row
-      await admin.from("profiles").delete().eq("id", userId);
-      // Delete auth user
-      const { error } = await admin.auth.admin.deleteUser(userId);
-      if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    return new Response(JSON.stringify({ error: "Unknown action" }), {
-      status: 404,
+  function jsonResponse(status: number, body: Record<string, unknown>): Response {
+    return new Response(JSON.stringify(body), {
+      status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (err) {
-    return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
   }
 });
