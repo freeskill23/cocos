@@ -83,6 +83,16 @@ export function AdminDashboard({ onNavigate, path }: AdminDashboardProps) {
     onNavigate("/");
   }, [signOut, onNavigate]);
 
+  const handleTabChange = useCallback((id: TabId) => {
+    setTab(id);
+    setSidebarOpen(false);
+    onNavigate(id === "dashboard" ? "/admin" : `/admin/${id}`);
+  }, [onNavigate]);
+
+  useEffect(() => {
+    setTab(tabFromPath(path));
+  }, [path]);
+
   if (!adminChecked) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-birch-50">
@@ -108,7 +118,6 @@ export function AdminDashboard({ onNavigate, path }: AdminDashboardProps) {
     );
   }
 
-
   const navItems: { id: TabId; label: string; icon: typeof LayoutDashboard }[] = [
     { id: "dashboard", label: "대시보드", icon: LayoutDashboard },
     { id: "orders", label: "주문 관리", icon: Package },
@@ -120,16 +129,6 @@ export function AdminDashboard({ onNavigate, path }: AdminDashboardProps) {
     { id: "members", label: "회원 관리", icon: Users },
     { id: "settings", label: "설정", icon: Settings },
   ];
-
-  const handleTabChange = useCallback((id: TabId) => {
-    setTab(id);
-    setSidebarOpen(false);
-    onNavigate(id === "dashboard" ? "/admin" : `/admin/${id}`);
-  }, [onNavigate]);
-
-  useEffect(() => {
-    setTab(tabFromPath(path));
-  }, [path]);
 
   return (
     <div className="min-h-screen bg-birch-50">
